@@ -1,0 +1,8 @@
+{
+  "promptDelete": false,
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "current",
+  "attachmentFolderPath": "Attachments",
+  "showUnsupportedFiles": true,
+  "defaultViewMode": "preview"
+}

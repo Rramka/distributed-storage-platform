@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "type": "file",
+      "ctime": 1755820000000,
+      "path": "Home.md",
+      "title": "Home"
+    },
+    {
+      "type": "file",
+      "ctime": 1755820000001,
+      "path": "Maps/Map of Architecture.md",
+      "title": "Architecture map"
+    },
+    {
+      "type": "file",
+      "ctime": 1755820000002,
+      "path": "System Canvas.canvas",
+      "title": "System canvas"
+    }
+  ]
+}

@@ -21,6 +21,16 @@ Instead of storing customer data in centralized data centers, the platform encry
 - **Self-healing** — missed heartbeats and failed integrity audits trigger automatic reconstruction and re-placement of lost fragments. Customers never notice node failures.
 - **Horizontal scalability** — the same architecture serves 100 nodes or 1 million nodes without redesign.
 
+## Knowledge base (Obsidian)
+
+A graph-oriented vault lives in [`knowledge-base/`](knowledge-base/). Open **that folder** as an Obsidian vault (not the repo root) to see how services, data-model entities, flows, and security concepts connect.
+
+- Start at `knowledge-base/Home.md`
+- `Cmd+G` / `Ctrl+G` for Graph view (nodes are colored by type)
+- `knowledge-base/System Canvas.canvas` is a spatial architecture map
+
+The numbered docs below remain the canonical long-form specs. The vault is a navigable index of the same design.
+
 ## Documentation index
 
 | Document | Contents |

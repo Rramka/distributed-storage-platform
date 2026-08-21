@@ -1,0 +1,299 @@
+{
+  "nodes": [
+    {
+      "id": "g-customers",
+      "type": "group",
+      "x": -1400,
+      "y": -900,
+      "width": 700,
+      "height": 420,
+      "label": "Customers",
+      "color": "1"
+    },
+    {
+      "id": "g-control",
+      "type": "group",
+      "x": -400,
+      "y": -1100,
+      "width": 1400,
+      "height": 820,
+      "label": "Control Plane",
+      "color": "5"
+    },
+    {
+      "id": "g-state",
+      "type": "group",
+      "x": -400,
+      "y": -120,
+      "width": 1400,
+      "height": 320,
+      "label": "State",
+      "color": "4"
+    },
+    {
+      "id": "g-providers",
+      "type": "group",
+      "x": 1200,
+      "y": -900,
+      "width": 520,
+      "height": 420,
+      "label": "Data Plane",
+      "color": "6"
+    },
+    {
+      "id": "g-data",
+      "type": "group",
+      "x": -1400,
+      "y": 280,
+      "width": 3120,
+      "height": 380,
+      "label": "Data model (what Postgres remembers)",
+      "color": "2"
+    },
+    {
+      "id": "n-customer",
+      "type": "file",
+      "file": "Participants/Customer.md",
+      "x": -1340,
+      "y": -840,
+      "width": 280,
+      "height": 80
+    },
+    {
+      "id": "n-cli",
+      "type": "file",
+      "file": "Data Plane/CLI and SDK.md",
+      "x": -1340,
+      "y": -720,
+      "width": 280,
+      "height": 80
+    },
+    {
+      "id": "n-web",
+      "type": "file",
+      "file": "Data Plane/Web Dashboard.md",
+      "x": -1340,
+      "y": -600,
+      "width": 280,
+      "height": 80
+    },
+    {
+      "id": "n-gw",
+      "type": "file",
+      "file": "Control Plane/API Gateway.md",
+      "x": -340,
+      "y": -1020,
+      "width": 260,
+      "height": 80
+    },
+    {
+      "id": "n-meta",
+      "type": "file",
+      "file": "Control Plane/Metadata Service.md",
+      "x": 40,
+      "y": -860,
+      "width": 280,
+      "height": 80
+    },
+    {
+      "id": "n-sched",
+      "type": "file",
+      "file": "Control Plane/Scheduler.md",
+      "x": 400,
+      "y": -860,
+      "width": 260,
+      "height": 80
+    },
+    {
+      "id": "n-health",
+      "type": "file",
+      "file": "Control Plane/Health Monitor.md",
+      "x": 40,
+      "y": -680,
+      "width": 280,
+      "height": 80
+    },
+    {
+      "id": "n-repair",
+      "type": "file",
+      "file": "Control Plane/Repair Service.md",
+      "x": 400,
+      "y": -680,
+      "width": 260,
+      "height": 80
+    },
+    {
+      "id": "n-ledger",
+      "type": "file",
+      "file": "Control Plane/Ledger Service.md",
+      "x": 740,
+      "y": -860,
+      "width": 220,
+      "height": 80
+    },
+    {
+      "id": "n-admin",
+      "type": "file",
+      "file": "Control Plane/Admin Dashboard.md",
+      "x": 740,
+      "y": -680,
+      "width": 220,
+      "height": 80
+    },
+    {
+      "id": "n-pg",
+      "type": "file",
+      "file": "Technology/Postgres.md",
+      "x": -340,
+      "y": -40,
+      "width": 360,
+      "height": 80
+    },
+    {
+      "id": "n-redis",
+      "type": "file",
+      "file": "Technology/Redis.md",
+      "x": 120,
+      "y": -40,
+      "width": 360,
+      "height": 80
+    },
+    {
+      "id": "n-nats",
+      "type": "file",
+      "file": "Technology/NATS JetStream.md",
+      "x": 580,
+      "y": -40,
+      "width": 360,
+      "height": 80
+    },
+    {
+      "id": "n-provider",
+      "type": "file",
+      "file": "Participants/Storage Provider.md",
+      "x": 1260,
+      "y": -840,
+      "width": 400,
+      "height": 80
+    },
+    {
+      "id": "n-agent",
+      "type": "file",
+      "file": "Data Plane/Node Agent.md",
+      "x": 1260,
+      "y": -700,
+      "width": 400,
+      "height": 80
+    },
+    {
+      "id": "n-user",
+      "type": "file",
+      "file": "Data Model/User.md",
+      "x": -1340,
+      "y": 360,
+      "width": 200,
+      "height": 70
+    },
+    {
+      "id": "n-bucket",
+      "type": "file",
+      "file": "Data Model/Bucket.md",
+      "x": -1080,
+      "y": 360,
+      "width": 200,
+      "height": 70
+    },
+    {
+      "id": "n-file",
+      "type": "file",
+      "file": "Data Model/File.md",
+      "x": -820,
+      "y": 360,
+      "width": 200,
+      "height": 70
+    },
+    {
+      "id": "n-ver",
+      "type": "file",
+      "file": "Data Model/File Version.md",
+      "x": -560,
+      "y": 360,
+      "width": 220,
+      "height": 70
+    },
+    {
+      "id": "n-chunk",
+      "type": "file",
+      "file": "Data Model/Chunk.md",
+      "x": -280,
+      "y": 360,
+      "width": 200,
+      "height": 70
+    },
+    {
+      "id": "n-frag",
+      "type": "file",
+      "file": "Data Model/Fragment.md",
+      "x": -20,
+      "y": 360,
+      "width": 200,
+      "height": 70
+    },
+    {
+      "id": "n-place",
+      "type": "file",
+      "file": "Data Model/Fragment Placement.md",
+      "x": 240,
+      "y": 360,
+      "width": 280,
+      "height": 70
+    },
+    {
+      "id": "n-node",
+      "type": "file",
+      "file": "Data Model/Node.md",
+      "x": 580,
+      "y": 360,
+      "width": 200,
+      "height": 70
+    },
+    {
+      "id": "n-zk",
+      "type": "text",
+      "text": "Bytes never enter the control plane.\nClients talk to nodes directly (dotted path).\nPlatform stores metadata + wrapped keys only.",
+      "x": -1340,
+      "y": -200,
+      "width": 700,
+      "height": 140,
+      "color": "3"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "fromNode": "n-customer", "toNode": "n-cli", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e2", "fromNode": "n-customer", "toNode": "n-web", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e3", "fromNode": "n-cli", "toNode": "n-gw", "fromSide": "right", "toSide": "left" },
+    { "id": "e4", "fromNode": "n-web", "toNode": "n-gw", "fromSide": "right", "toSide": "left" },
+    { "id": "e5", "fromNode": "n-gw", "toNode": "n-meta", "fromSide": "bottom", "toSide": "left" },
+    { "id": "e6", "fromNode": "n-gw", "toNode": "n-ledger", "fromSide": "right", "toSide": "top" },
+    { "id": "e7", "fromNode": "n-meta", "toNode": "n-sched", "fromSide": "right", "toSide": "left" },
+    { "id": "e8", "fromNode": "n-meta", "toNode": "n-pg", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e9", "fromNode": "n-sched", "toNode": "n-redis", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e10", "fromNode": "n-health", "toNode": "n-redis", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e11", "fromNode": "n-health", "toNode": "n-nats", "fromSide": "bottom", "toSide": "left" },
+    { "id": "e12", "fromNode": "n-repair", "toNode": "n-nats", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e13", "fromNode": "n-ledger", "toNode": "n-pg", "fromSide": "bottom", "toSide": "right" },
+    { "id": "e14", "fromNode": "n-provider", "toNode": "n-agent", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e15", "fromNode": "n-agent", "toNode": "n-health", "fromSide": "left", "toSide": "right", "label": "heartbeats mTLS" },
+    { "id": "e16", "fromNode": "n-cli", "toNode": "n-agent", "fromSide": "right", "toSide": "left", "label": "encrypted fragments", "color": "3" },
+    { "id": "e17", "fromNode": "n-repair", "toNode": "n-agent", "fromSide": "right", "toSide": "bottom", "label": "ciphertext repair", "color": "3" },
+    { "id": "e18", "fromNode": "n-user", "toNode": "n-bucket", "fromSide": "right", "toSide": "left" },
+    { "id": "e19", "fromNode": "n-bucket", "toNode": "n-file", "fromSide": "right", "toSide": "left" },
+    { "id": "e20", "fromNode": "n-file", "toNode": "n-ver", "fromSide": "right", "toSide": "left" },
+    { "id": "e21", "fromNode": "n-ver", "toNode": "n-chunk", "fromSide": "right", "toSide": "left" },
+    { "id": "e22", "fromNode": "n-chunk", "toNode": "n-frag", "fromSide": "right", "toSide": "left" },
+    { "id": "e23", "fromNode": "n-frag", "toNode": "n-place", "fromSide": "right", "toSide": "left" },
+    { "id": "e24", "fromNode": "n-place", "toNode": "n-node", "fromSide": "right", "toSide": "left" },
+    { "id": "e25", "fromNode": "n-sched", "toNode": "n-health", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e26", "fromNode": "n-admin", "toNode": "n-meta", "fromSide": "left", "toSide": "right" }
+  ]
+}
