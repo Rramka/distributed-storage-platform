@@ -11,7 +11,7 @@ aliases:
 
 A decentralized cloud storage network. Unused disk on ordinary computers becomes a secure, globally distributed cloud. The platform orchestrates; it never stores file contents and can never decrypt them.
 
-**Status:** Phase 1 — architecture and design. No application code yet. Canonical long-form specs live in `docs/` in the git repo; this vault is the **graph of how those pieces connect**.
+**Status:** Phase 1 — solo builder track. Specs in `docs/` are canonical. Code is starting at M0 (foundations). The vault is the **graph of how those pieces connect**. Active scope is M0–M4 (durability demo); ledger and dashboards are deferred. See [[Map of Roadmap]].
 
 ## Open the graph
 

@@ -1,0 +1,10 @@
+.git
+.cursor
+knowledge-base
+docs
+business
+web
+**/.DS_Store
+.env
+bin
+dist

@@ -1,0 +1,15 @@
+---
+description: Zero-knowledge crypto rules for pipeline, tickets, receipts, and the CLI
+globs: "{internal/pipeline/**,internal/tickets/**,internal/receipts/**,internal/ca/**,cmd/dsp/**,cmd/agent/**}"
+alwaysApply: false
+---
+
+# Crypto invariants
+
+- Master Key (MK) is derived on the client and **never** crosses a network boundary. The platform stores only wrapped File Keys.
+- Never log plaintext, passphrases, MK, File Keys, or wrapped keys. Never write them to agent `data_dir`.
+- Compare MACs, hashes, and signatures with `crypto/subtle.ConstantTimeCompare`.
+- Every placement/retrieval ticket is checked for: signature, expiry, node binding, and fragment binding. Reject replays and cross-node tickets.
+- Repair operates on ciphertext only. Do not decrypt during reconstruction.
+- Prefer well-known libraries (`golang.org/x/crypto`, `klauspost/reedsolomon`) over hand-rolled crypto.
+- Changes here require a `security-review` subagent before merge. The red-team fixture (dump the platform DB; nothing decrypts) must keep passing.

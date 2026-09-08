@@ -2,26 +2,71 @@
 
 The build order follows one rule: **every milestone ends with something that runs end-to-end**, even if the slice is thin. Redundancy, healing, and billing layer onto a working store-and-retrieve core rather than being built in parallel and integrated late.
 
+## Solo builder track (the current plan)
+
+The original M0–M6 timeline below assumed a small team (2–4 engineers) over ~17 weeks. This repo is built by **one person at ~10–15 hours/week**, with AI agents doing the mechanical work. That is ~150 hours, not ~2,000. Scope is therefore cut to a single investable artifact:
+
+> `dsp put Vacation.mp4` → kill 6 of 16 storage nodes on camera → file still downloads byte-identical → fleet self-heals back to 16/16 in minutes → and the platform's own database, dumped on screen, decrypts nothing.
+
+That scene is **M0–M4**, minus anything that does not appear in it. Weeks in this section are calendar weeks for one person, not the original team sizing.
+
+### What we build (M0–M4)
+
+Metadata service, minimal API gateway (**API-key auth only**), node agent, tickets/receipts, client pipeline (Argon2id → AES-256-GCM → 16 MB chunks → Reed–Solomon 10+6), naive-then-scored scheduler, health monitor, repair service, chaos harness, one small fleet-visualizer web page.
+
+### Explicitly deferred (do not start)
+
+These remain specified in the docs for later phases. They are **out of the solo track**. Do not implement them until the durability demo is recorded.
+
+| Deferred | Why | Spec |
+|---|---|---|
+| Ledger / billing service | Investors fund the durability claim, not the invoice screen | [09-billing-ledger.md](09-billing-ledger.md) |
+| Customer, provider, and admin dashboards | Replaced by the fleet visualizer + CLI for the demo | M6 below |
+| JWT / refresh tokens | API keys are enough for CLI and agents | [08-api.md](08-api.md) |
+| Agent installers and self-update | Compose fleet is the demo; real installers come after | M6 below |
+| Continuous rebalancing | Repair is the claim; rebalancing is an optimization | [06-scheduler-and-repair.md](06-scheduler-and-repair.md) |
+| Reputation beyond a scalar | A single `reputation REAL` is enough for scoring | [06-scheduler-and-repair.md](06-scheduler-and-repair.md) |
+| S3-compatible API | Native REST only | [08-api.md](08-api.md) |
+| Real payments (Stripe / crypto / payouts) | Phase 2 | this document, long-term evolution |
+
+### Twelve-week calendar
+
+- **W1** — Repo skeleton, AI operating system (rules, skills, hooks, MCP), Compose (Postgres/Redis/NATS), CI. Exit: `docker compose up` gives green health checks.
+- **W2–3** — Metadata service and gateway with API-key auth only. Exit: full metadata CRUD from the CLI.
+- **W4–5** — Node agent, fragment PUT/GET with tickets and receipts, naive scheduler, 16-agent Compose fleet. Exit: single-copy round trip.
+- **W6–7** — Client pipeline: Argon2id, streaming AES-256-GCM, 16 MB chunks, Reed-Solomon 10+6, plan/transfer/commit with resume. Exit: `dsp put` / `dsp get` byte-identical with 6 agents stopped.
+- **W8–9** — Health monitor state machine, NATS events, repair service, chaos harness. Exit: the M4 test — kill 6 of 16, back to 16/16, downloads never fail.
+- **W10** — Fleet visualizer web page and the scripted demo.
+- **W11** — Soak run, security review, red-team DB-dump fixture, invariant CI.
+- **W12** — Demo video, deck, data room, landing page with waitlist.
+
+A fundraise track runs in parallel (~2 hours/week): market research, competitive comparison, deck, weekly investor update. See `business/` and the Cursor skills `market-research` / `investor-update` / `demo-capture`.
+
 ## Proposed repository layout (monorepo)
 
 ```text
 distributed-storage-platform/
-  docs/                    # this documentation set
+  docs/                    # this documentation set (canonical spec)
+  AGENTS.md                # how AI agents work in this repo
+  STATUS.md                # where the last session left off
   proto/                   # protobuf definitions (control API, tickets, receipts)
   cmd/
-    gateway/  metadata/  scheduler/  healthmon/  repair/  ledger/  admind/
+    gateway/  metadata/  scheduler/  healthmon/  repair/
     agent/                 # node agent binary
     dsp/                   # customer CLI
+    # deferred: ledger/  admind/
   internal/
     pipeline/              # encryption, chunking, erasure coding (shared by CLI and repair)
     tickets/  receipts/  ca/   # crypto primitives
     store/                 # postgres + redis access layers
   web/
-    dashboard/             # customer + provider dashboard (SPA)
-    admin/                 # operator dashboard
+    visualizer/            # solo-track fleet visualizer (the demo UI)
+    # deferred: dashboard/  admin/
   deploy/
     compose/               # local dev + simulated fleet
     migrations/
+  business/                # research, investor updates, deck (not product code)
+  .cursor/                 # rules, skills, hooks, project MCP
 ```
 
 ## Milestones
@@ -31,7 +76,7 @@ Monorepo scaffolding, CI, protobuf toolchain, Postgres migrations from [03-data-
 **Exit:** `docker compose up` brings up empty control-plane skeletons that pass health checks.
 
 ### M1 — Metadata service + auth (week 3–4)
-Users, buckets, files, folders, rename, soft delete; JWT + API keys; API Gateway with error format and rate limits from [08-api.md](08-api.md).
+Users, buckets, files, folders, rename, soft delete; **API keys only** on the solo track (JWT deferred); API Gateway with error format and rate limits from [08-api.md](08-api.md).
 **Exit:** full metadata CRUD via the CLI against a running gateway — no bytes stored yet.
 
 ### M2 — Node agent + happy-path storage (week 5–7)
@@ -46,15 +91,15 @@ Full pipeline from [04-storage-pipeline.md](04-storage-pipeline.md): Argon2id ke
 Health Monitor state machine (`online → suspect → offline`), NATS events, Repair Service with priority queue, ciphertext reconstruction, flap handling; storage challenges with pre-computed challenge sets; scheduler upgraded to full scoring + weighted sampling ([06-scheduler-and-repair.md](06-scheduler-and-repair.md)).
 **Exit:** kill 6 of 16 agents holding a file; within minutes all chunks are back to 16/16 healthy on survivors + fresh nodes, download works throughout. This milestone is the platform's core claim — it gets the most test investment.
 
-### M5 — Ledger + billing (week 13–14)
+### M5 — Ledger + billing (week 13–14) — deferred on the solo track
 Usage event stream, double-entry ledger, hourly accruals, reliability multiplier, `GET /storage` and `GET /earnings`, quota enforcement ([09-billing-ledger.md](09-billing-ledger.md)).
 **Exit:** a simulated month (accelerated clock) produces balanced books — every txn sums to zero, customer charges reconcile with provider earnings + platform margin.
 
-### M6 — Dashboards + MVP hardening (week 15–17)
+### M6 — Dashboards + MVP hardening (week 15–17) — deferred on the solo track
 Customer dashboard (files, usage), provider dashboard (nodes, earnings, registration codes), admin dashboard (network map, repair queue, quarantine actions); audit logging wired through; agent installers + self-update for the three OSes; load and chaos test pass (below).
 **Exit:** the full MVP scope of [01-overview.md](01-overview.md), demoable end-to-end by a non-developer through the dashboards.
 
-Timeline assumes a small focused team (2–4 engineers); treat weeks as relative sizing.
+The original timeline assumed a small focused team (2–4 engineers). **The active plan is the Solo builder track above.** Treat M5–M6 weeks as relative sizing for after the raise demo.
 
 ## Testing strategy
 
@@ -88,7 +133,7 @@ harness verbs:
 
 1. Every committed chunk has ≥ 12 healthy placements (alert < 13).
 2. No plaintext or unwrapped key ever appears in any node's `data_dir` or any control-plane store.
-3. Ledger: every transaction sums to zero; meters reconcile with the placement map.
+3. Ledger: every transaction sums to zero; meters reconcile with the placement map. **(Invariant exists; the ledger service is deferred on the solo track — skip until M5 starts.)**
 4. Placement constraints (node/region/ASN/owner caps) hold for every chunk after any sequence of repairs.
 
 ## Long-term evolution

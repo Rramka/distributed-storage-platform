@@ -1,0 +1,13 @@
+---
+description: Spec is canonical; do not invent product behavior
+alwaysApply: true
+---
+
+# Spec fidelity
+
+- `docs/` is the source of truth. Implement the written design; do not add product behavior that is not in the spec.
+- If reality must diverge, change the matching `docs/` file in the same change and sync `knowledge-base/` (`kb-sync` skill).
+- Active scope is the **solo builder track** in `docs/10-mvp-roadmap.md`: M0–M4 only.
+- Do not implement ledger/billing, dashboards (except the fleet visualizer), JWT, installers, rebalancing, rich reputation, or S3.
+- Cite the doc section a change implements in the commit or PR body.
+- Read `STATUS.md` at session start; update it before you stop.

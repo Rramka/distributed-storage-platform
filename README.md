@@ -4,7 +4,9 @@ A decentralized cloud storage network that turns unused disk space on ordinary c
 
 Instead of storing customer data in centralized data centers, the platform encrypts data on the client, splits it into erasure-coded fragments, and distributes those fragments across thousands of independently operated devices worldwide. The platform itself is a pure orchestration layer: it never stores customer file contents and can never decrypt them.
 
-**Status: Phase 1 — architecture and design documentation.** No application code exists yet. These documents define the system that will be built, in Go, as described in [docs/10-mvp-roadmap.md](docs/10-mvp-roadmap.md).
+**Status: Phase 1 — solo builder track (M0–M4).** Specs in [`docs/`](docs/) are canonical. The investable artifact is: upload an encrypted file, kill 6 of 16 nodes on camera, download still works, the fleet self-heals, and a platform DB dump decrypts nothing. Ledger, dashboards, JWT, and S3 are specified but deferred — see the solo builder track in [docs/10-mvp-roadmap.md](docs/10-mvp-roadmap.md).
+
+Agents: read [`AGENTS.md`](AGENTS.md) and [`STATUS.md`](STATUS.md) first. Cursor rules, skills, and hooks live in [`.cursor/`](.cursor/).
 
 ## The three participants
 

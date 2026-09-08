@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/gofmt.sh",
+        "timeout": 30
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/verify-build.sh",
+        "timeout": 180,
+        "loop_limit": 2
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/guard-shell.sh",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": ".cursor/hooks/scan-secrets.sh",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "prompt",
+        "timeout": 30,
+        "prompt": "The session is ending. Update STATUS.md in the project root: set Last updated to today, record what shipped this session, remaining blockers, and the next three tasks. Keep it under 40 lines. Do not invent completed work. Here is the hook input: $ARGUMENTS"
+      }
+    ]
+  }
+}

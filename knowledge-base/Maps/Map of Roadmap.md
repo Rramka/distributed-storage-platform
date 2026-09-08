@@ -9,15 +9,21 @@ aliases:
 
 Build rule: **every milestone ends with something that runs end-to-end**. Healing and billing layer onto a working store-and-retrieve core.
 
+## Solo builder track (active)
+
+One person, ~10–15 hours/week, AI-assisted. The investable artifact is M0–M4: encrypted upload, kill 6 of 16 nodes, download still works, fleet heals, platform DB decrypts nothing.
+
+Deferred until after that demo: [[Ledger Service]], dashboards, JWT, installers, rebalancing, reputation beyond a scalar, S3. See [[Non-goals]] and `docs/10-mvp-roadmap.md`.
+
 ## Phase 1 slice
 
-[[MVP Scope]] is a complete vertical: register, encrypt, place, retrieve, audit, repair, ledger (no real money), admin view.
+[[MVP Scope]] is a complete vertical: register, encrypt, place, retrieve, audit, repair. Ledger (no real money) and admin view are specified but deferred on the solo track.
 
 Explicitly out: compute, S3 API, real payments, sync clients, provider-set pricing. See [[Non-goals]].
 
 ## Milestones
 
-See [[Milestones]] for M0–M6 (foundations → metadata → happy-path storage → encryption + EC → health/repair → ledger → dashboards).
+See [[Milestones]] for M0–M6 (foundations → metadata → happy-path storage → encryption + EC → health/repair → ledger → dashboards). **Active work stops at M4.**
 
 M4 ([[Repair Loop]] + [[Storage Challenge]] + full [[Scheduler]] scoring) is the platform's core claim and gets the most test investment.
 

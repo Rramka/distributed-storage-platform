@@ -1,0 +1,27 @@
+---
+description: Go conventions for control-plane services and the node agent
+globs: "**/*.go"
+alwaysApply: false
+---
+
+# Go services
+
+- Pass `context.Context` as the first argument on all blocking and I/O functions.
+- Wrap errors with `%w` and a short op name: `fmt.Errorf("store.insertPlacement: %w", err)`.
+- Never `panic` in `cmd/agent` (providers run this). `log.Fatal` only in `main` on irrecoverable startup failure.
+- Structured logs: `log/slog`. Never log plaintext, keys, wrapped keys, passphrases, or raw ticket secrets.
+- HTTP: `GET /healthz` on every long-running process. Timeouts on clients and servers.
+- Tests are table-driven. Prefer `t.Parallel()` for pure functions.
+
+```go
+// BAD
+func Place(n Node) { panic("no capacity") }
+
+// GOOD
+func Place(ctx context.Context, n Node) error {
+    if n.FreeBytes < 1 {
+        return fmt.Errorf("scheduler.place: node %s has no capacity", n.ID)
+    }
+    return nil
+}
+```

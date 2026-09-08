@@ -1,0 +1,21 @@
+---
+description: Test conventions; property tests for erasure coding and tickets
+globs: "**/*_test.go"
+alwaysApply: false
+---
+
+# Tests
+
+- Unit tests for pure logic; integration tests against real Postgres/Redis/NATS via Compose.
+- Erasure coding: property test that any 10 of 16 fragments reconstruct the chunk; random shard drops.
+- Tickets: property test expiry, wrong-node, wrong-fragment, and tampered signature all fail.
+- Do not assert on log text. Assert on returned errors and stored state.
+- `-short` skips Compose-backed tests so hooks and CI stay fast.
+- Chaos scenarios belong in the harness (`chaos-scenario` skill), not in unit tests.
+
+```go
+func TestReedSolomonRoundTrip(t *testing.T) {
+    t.Parallel()
+    // encode → drop any 6 shards → decode equals original
+}
+```
