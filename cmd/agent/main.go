@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := httpserver.ListenAndServe("agent", httpserver.AddrFromEnv(":9000")); err != nil {
+	if err := httpserver.ListenAndServe("agent", httpserver.AddrFromEnv(":9000"), nil); err != nil {
 		slog.Error("agent exited", "err", err)
 		os.Exit(1)
 	}

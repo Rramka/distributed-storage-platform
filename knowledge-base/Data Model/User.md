@@ -19,6 +19,6 @@ Postgres `users`. One identity for the whole marketplace.
 
 Owns [[Bucket]]s, [[API Key]]s, and optionally [[Node]]s. Has [[Ledger Account]]s for charges and/or earnings.
 
-Auth: login → JWT (15 min) + rotating refresh; TOTP 2FA at launch. Programmatic: [[API Key]].
+Auth: login → JWT is **deferred** on the solo track. Register stores an argon2id password hash; `POST /auth/api-keys` uses HTTP Basic; programmatic calls use [[API Key]] (`X-Api-Key`).
 
 Related: [[Customer]], [[Storage Provider]], [[Audit Log]]

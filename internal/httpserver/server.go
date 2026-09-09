@@ -14,14 +14,22 @@ import (
 	"github.com/Rramka/distributed-storage-platform/internal/health"
 )
 
-// ListenAndServe runs a process with GET /healthz until SIGINT/SIGTERM.
-func ListenAndServe(service, addr string) error {
+// NewMux returns a ServeMux with GET /healthz registered.
+func NewMux(service string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", health.Handler(service))
+	return mux
+}
+
+// ListenAndServe runs handler until SIGINT/SIGTERM. If handler is nil, NewMux(service) is used.
+func ListenAndServe(service, addr string, handler http.Handler) error {
+	if handler == nil {
+		handler = NewMux(service)
+	}
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: dsp
       POSTGRES_DB: dsp
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../migrations:/docker-entrypoint-initdb.d:ro
@@ -48,6 +48,8 @@ services:
         SERVICE: gateway
     environment:
       HTTP_ADDR: ":8080"
+      REDIS_URL: redis://redis:6379
+      METADATA_URL: http://metadata:8081
     ports:
       - "8080:8080"
     depends_on:
@@ -56,6 +58,8 @@ services:
       redis:
         condition: service_healthy
       nats:
+        condition: service_healthy
+      metadata:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
@@ -72,6 +76,7 @@ services:
         SERVICE: metadata
     environment:
       HTTP_ADDR: ":8081"
+      POSTGRES_URL: postgres://dsp:dsp@postgres:5432/dsp?sslmode=disable
     ports:
       - "8081:8081"
     depends_on:

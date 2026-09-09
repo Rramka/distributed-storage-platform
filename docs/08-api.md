@@ -9,10 +9,12 @@ Three API surfaces exist in Phase 1:
 ## Conventions
 
 - Base URL: `https://api.<platform-domain>/v1`
-- Authentication: `Authorization: Bearer <jwt>` (dashboard/CLI sessions) or `X-Api-Key: <key>` (programmatic).
+- Authentication: `X-Api-Key: <key>` on the solo builder track. JWT access/refresh tokens (`Authorization: Bearer`) are specified for later and are **deferred** until after M4 (`docs/10-mvp-roadmap.md`).
 - All request/response bodies are JSON except raw fragment transfer (which never touches this API).
 - IDs are UUIDs. Timestamps are RFC 3339 UTC. Sizes are bytes.
 - Pagination: `?limit=` (max 1000) and `?cursor=`; responses carry `next_cursor` when more data exists.
+
+Solo-track auth bootstrap: `POST /auth/register` stores an argon2id password hash. `POST /auth/api-keys` is authenticated with HTTP Basic (`email:password`) and returns the API key secret **once**. Every other `/v1` endpoint takes `X-Api-Key` only.
 
 ### Error format
 
@@ -43,9 +45,10 @@ Every non-2xx response has the same shape:
 | Method & path | Purpose |
 |---|---|
 | `POST /auth/register` | Create account (email, password). Returns user + hint to generate client-side keys. |
-| `POST /auth/login` | Exchange credentials (+ TOTP if enabled) for access + refresh tokens. |
-| `POST /auth/refresh` | Rotate the refresh token, get a new access token. |
-| `POST /auth/api-keys` | Create an API key (label, scopes, expiry). Secret returned **once**. |
+| `POST /auth/login` | **Deferred** (JWT). Exchange credentials for access + refresh tokens. |
+| `POST /auth/refresh` | **Deferred** (JWT). Rotate the refresh token. |
+| `POST /auth/api-keys` | Create an API key (label, scopes, expiry). Solo track: HTTP Basic (`email:password`). Secret returned **once**. |
+| `GET /auth/api-keys` | List the caller's non-revoked keys (no secrets). |
 | `DELETE /auth/api-keys/{id}` | Revoke a key. |
 
 ## File operations

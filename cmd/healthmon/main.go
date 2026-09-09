@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := httpserver.ListenAndServe("healthmon", httpserver.AddrFromEnv(":8083")); err != nil {
+	if err := httpserver.ListenAndServe("healthmon", httpserver.AddrFromEnv(":8083"), nil); err != nil {
 		slog.Error("healthmon exited", "err", err)
 		os.Exit(1)
 	}

@@ -9,8 +9,8 @@ aliases:
 
 Single public HTTP entry point for [[Customer]]s and the [[Web Dashboard]].
 
-- Terminates TLS, authenticates JWT / [[API Key]], enforces per-account rate limits ([[Redis]] token buckets)
-- Routes to internal services over [[gRPC]]; shapes errors into the common format in [[Customer REST API]]
+- Terminates TLS, authenticates JWT / [[API Key]], enforces per-account rate limits ([[Redis]] token buckets). **Solo track:** API keys only; JWT is deferred.
+- Routes to [[Metadata Service]] over internal HTTP/JSON in M1 (gRPC arrives in M2 with the node control API); shapes errors into the common format in [[Customer REST API]]
 - Stateless — scale horizontally behind a load balancer
 
 Does **not** sit on the fragment byte path. After [[Upload Flow]] planning, the client talks to [[Node Agent]] endpoints directly.

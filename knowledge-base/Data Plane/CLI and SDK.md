@@ -9,7 +9,7 @@ aliases:
 
 # CLI and SDK
 
-Customer client. **All transform work lives here**: [[Client-side Encryption]], chunking, hashing, [[Erasure Coding]]. The [[Control Plane]] only coordinates.
+Customer client. In M1 it does metadata CRUD (`register`, `api-keys`, `buckets`, `folders`, `ls`, `mv`, `rm`) against the [[API Gateway]]. **All transform work lives here from M2/M3**: [[Client-side Encryption]], chunking, hashing, [[Erasure Coding]]. The [[Control Plane]] only coordinates.
 
 ## Upload (product `dsp put`)
 

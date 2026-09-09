@@ -10,6 +10,8 @@ aliases:
 
 Owns the source of truth for everything except file bytes: [[User]], [[Bucket]], [[File]], [[File Version]], [[Chunk]], [[Fragment]], [[Fragment Placement]]. Schema: [[Map of Data Model]].
 
+M1 implements users, API keys, buckets, and folders (path-based) over Postgres via internal HTTP/JSON. Upload/download planning is M2.
+
 ## Responsibilities
 
 - **Upload planning:** given a manifest, asks the [[Scheduler]] for target nodes, issues signed time-limited [[Placement Ticket]]s

@@ -5,7 +5,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "postgresql://dsp_readonly:dsp_readonly@127.0.0.1:5432/dsp"
+        "postgresql://dsp_readonly:dsp_readonly@127.0.0.1:5433/dsp"
       ]
     },
     "context7": {

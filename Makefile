@@ -33,4 +33,7 @@ vet:
 	go vet ./...
 
 migrate:
-	$(COMPOSE) exec -T postgres psql -U dsp -d dsp -f /docker-entrypoint-initdb.d/000001_init.sql
+	@for f in deploy/migrations/*.sql; do \
+		echo "applying $$f"; \
+		$(COMPOSE) exec -T postgres psql -U dsp -d dsp -f /docker-entrypoint-initdb.d/$$(basename $$f); \
+	done

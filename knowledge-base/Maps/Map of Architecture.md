@@ -14,7 +14,7 @@ The platform splits into a **[[Control Plane]]** (services we run) and a **[[Dat
 
 | Service | Job | State it touches |
 |---|---|---|
-| [[API Gateway]] | Public HTTP entry; auth, rate limits, routing | none (stateless) |
+| [[API Gateway]] | Public HTTP entry; auth, rate limits, routing (HTTP/JSON to metadata in M1) | none (stateless) |
 | [[Metadata Service]] | Source of truth for files, chunks, placements | [[Postgres]] |
 | [[Scheduler]] | Where every [[Fragment]] should live | [[Postgres]], [[Redis]] |
 | [[Health Monitor]] | Heartbeats, liveness, [[Storage Challenge]]s | [[Redis]], [[Postgres]], [[NATS JetStream]] |
