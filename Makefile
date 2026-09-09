@@ -1,12 +1,26 @@
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
-.PHONY: up down ps logs test test-short vet fmt migrate build
+.PHONY: up down ps logs test test-short vet fmt migrate build fleet-up fleet-down fleet-seed
 
 up:
 	$(COMPOSE) up -d --build
+	@$(MAKE) export-ca
 
 down:
 	$(COMPOSE) down
+
+fleet-up: up
+
+fleet-down:
+	$(COMPOSE) down -v
+
+fleet-seed:
+	$(COMPOSE) up fleet-seed --build
+
+export-ca:
+	@mkdir -p .local
+	@$(COMPOSE) cp metadata:/ca/ca.crt .local/ca.crt
+	@echo "wrote .local/ca.crt (DSP_CA_FILE)"
 
 ps:
 	$(COMPOSE) ps

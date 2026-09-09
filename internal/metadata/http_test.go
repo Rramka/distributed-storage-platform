@@ -164,6 +164,24 @@ func (m *mem) DeleteFile(_ context.Context, userID, fileID uuid.UUID) error {
 	return nil
 }
 
+func (m *mem) MintRegistrationCode(_ context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error) {
+	return store.RegistrationCode{ID: uuid.New(), OwnerID: userID, Endpoint: endpoint, ExpiresAt: time.Now().Add(time.Hour)}, "reg_test", nil
+}
+func (m *mem) ListNodes(_ context.Context, _ uuid.UUID) ([]store.Node, error) { return nil, nil }
+func (m *mem) RegisterNode(_ context.Context, _ string, _ []byte, _ string, _ string, _ string, _ string, _ int64) (store.Node, string, error) {
+	return store.Node{}, "", ErrInvalid
+}
+func (m *mem) HeartbeatNode(_ context.Context, _ uuid.UUID, _, _ int64) error { return nil }
+func (m *mem) PlanUpload(_ context.Context, _ uuid.UUID, _ store.UploadManifest) (PlanResult, error) {
+	return PlanResult{}, ErrInvalid
+}
+func (m *mem) CommitUpload(_ context.Context, _, _ uuid.UUID, _ []string) (store.File, store.FileVersion, error) {
+	return store.File{}, store.FileVersion{}, ErrInvalid
+}
+func (m *mem) PlanDownload(_ context.Context, _, _ uuid.UUID) (DownloadResult, error) {
+	return DownloadResult{}, ErrInvalid
+}
+
 func TestInternalHTTPRegisterAndLookup(t *testing.T) {
 	t.Parallel()
 	mux := httpserver.NewMux("metadata")

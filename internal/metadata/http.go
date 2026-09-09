@@ -1,8 +1,11 @@
 package metadata
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -265,6 +268,149 @@ func Mount(mux *http.ServeMux, svc Service) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+
+	mux.HandleFunc("POST /internal/nodes/register", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RegistrationCode string `json:"registration_code"`
+			CSR              string `json:"csr"`
+			Endpoint         string `json:"endpoint"`
+			OS               string `json:"os"`
+			AgentVersion     string `json:"agent_version"`
+			HostnameLabel    string `json:"hostname_label"`
+			CapacityBytes    int64  `json:"capacity_bytes"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		csr, err := decodeB64(req.CSR)
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		n, pem, err := svc.RegisterNode(r.Context(), req.RegistrationCode, csr, req.Endpoint, req.OS, req.AgentVersion, req.HostnameLabel, req.CapacityBytes)
+		if writeErr(w, r, err) {
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"node_id": n.ID.String(), "cert_pem": pem, "endpoint": n.Endpoint})
+	})
+
+	mux.HandleFunc("POST /internal/users/{userID}/registration-codes", func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := parseUser(w, r)
+		if !ok {
+			return
+		}
+		var req struct {
+			Endpoint string `json:"endpoint"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		c, secret, err := svc.MintRegistrationCode(r.Context(), userID, req.Endpoint)
+		if writeErr(w, r, err) {
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"id":         c.ID.String(),
+			"endpoint":   c.Endpoint,
+			"expires_at": c.ExpiresAt.UTC().Format(time.RFC3339),
+			"secret":     secret,
+		})
+	})
+
+	mux.HandleFunc("GET /internal/users/{userID}/nodes", func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := parseUser(w, r)
+		if !ok {
+			return
+		}
+		nodes, err := svc.ListNodes(r.Context(), userID)
+		if writeErr(w, r, err) {
+			return
+		}
+		if nodes == nil {
+			nodes = []store.Node{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"nodes": nodes})
+	})
+
+	mux.HandleFunc("POST /internal/nodes/{id}/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		var req struct {
+			UsedBytes     int64 `json:"used_bytes"`
+			CapacityBytes int64 `json:"capacity_bytes"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		if writeErr(w, r, svc.HeartbeatNode(r.Context(), id, req.UsedBytes, req.CapacityBytes)) {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("POST /internal/users/{userID}/upload", func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := parseUser(w, r)
+		if !ok {
+			return
+		}
+		m, err := decodeManifest(r)
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		res, err := svc.PlanUpload(r.Context(), userID, m)
+		if writeErr(w, r, err) {
+			return
+		}
+		writeJSON(w, http.StatusCreated, res)
+	})
+
+	mux.HandleFunc("POST /internal/users/{userID}/upload/{id}/commit", func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := parseUser(w, r)
+		if !ok {
+			return
+		}
+		id, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		var req struct {
+			Receipts []string `json:"receipts"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		f, v, err := svc.CommitUpload(r.Context(), userID, id, req.Receipts)
+		if writeErr(w, r, err) {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"file_id":    f.ID.String(),
+			"version_no": v.VersionNo,
+			"status":     v.Status,
+		})
+	})
+
+	mux.HandleFunc("GET /internal/users/{userID}/download/{id}", func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := parseUser(w, r)
+		if !ok {
+			return
+		}
+		id, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		res, err := svc.PlanDownload(r.Context(), userID, id)
+		if writeErr(w, r, err) {
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	})
 }
 
 func parseUser(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
@@ -304,6 +450,10 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) bool {
 		apierr.Write(w, apierr.CodeAlreadyExists, "already exists", rid)
 	case errors.Is(err, ErrNotEmpty), errors.Is(err, store.ErrNotEmpty):
 		apierr.Write(w, apierr.CodeConflict, "bucket is not empty", rid)
+	case errors.Is(err, ErrIncomplete), errors.Is(err, store.ErrIncomplete):
+		apierr.Write(w, apierr.CodeConflict, "too few fragments confirmed", rid)
+	case errors.Is(err, ErrUnavailable), errors.Is(err, store.ErrUnavailable):
+		apierr.Write(w, apierr.CodePlacementUnavailable, "placement unavailable", rid)
 	default:
 		slog.Error("metadata handler", "err", err, "request_id", rid)
 		apierr.Write(w, apierr.CodeInternal, "internal error", rid)
@@ -367,4 +517,76 @@ func fileJSON(f store.File) map[string]any {
 		"created_at": f.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at": f.UpdatedAt.UTC().Format(time.RFC3339),
 	}
+}
+
+func decodeB64(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
+}
+
+type jsonManifest struct {
+	BucketID       string          `json:"bucket_id"`
+	Path           string          `json:"path"`
+	SizeBytes      int64           `json:"size_bytes"`
+	ContentSHA256  string          `json:"content_sha256"`
+	EncryptionMeta json.RawMessage `json:"encryption_meta"`
+	ChunkSize      int             `json:"chunk_size"`
+	EC             struct {
+		Data   int `json:"data"`
+		Parity int `json:"parity"`
+	} `json:"ec"`
+	Chunks []struct {
+		Seq       int    `json:"seq"`
+		SHA256    string `json:"sha256"`
+		SizeBytes int    `json:"size_bytes"`
+		Fragments []struct {
+			ShardIndex int    `json:"shard_index"`
+			SHA256     string `json:"sha256"`
+			SizeBytes  int    `json:"size_bytes"`
+		} `json:"fragments"`
+	} `json:"chunks"`
+}
+
+func decodeManifest(r *http.Request) (store.UploadManifest, error) {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		return store.UploadManifest{}, err
+	}
+	var jm jsonManifest
+	if err := json.Unmarshal(raw, &jm); err != nil {
+		return store.UploadManifest{}, err
+	}
+	bid, err := uuid.Parse(jm.BucketID)
+	if err != nil {
+		return store.UploadManifest{}, err
+	}
+	sum, err := hex.DecodeString(jm.ContentSHA256)
+	if err != nil {
+		return store.UploadManifest{}, err
+	}
+	m := store.UploadManifest{
+		BucketID:       bid,
+		Path:           jm.Path,
+		SizeBytes:      jm.SizeBytes,
+		ContentSHA256:  sum,
+		EncryptionMeta: jm.EncryptionMeta,
+		ChunkSize:      jm.ChunkSize,
+		ECData:         int16(jm.EC.Data),
+		ECParity:       int16(jm.EC.Parity),
+	}
+	for _, ch := range jm.Chunks {
+		cs, err := hex.DecodeString(ch.SHA256)
+		if err != nil {
+			return store.UploadManifest{}, err
+		}
+		mc := store.ManifestChunk{Seq: ch.Seq, SizeBytes: ch.SizeBytes, SHA256: cs}
+		for _, fr := range ch.Fragments {
+			fs, err := hex.DecodeString(fr.SHA256)
+			if err != nil {
+				return store.UploadManifest{}, err
+			}
+			mc.Fragments = append(mc.Fragments, store.ManifestFragment{ShardIndex: int16(fr.ShardIndex), SizeBytes: fr.SizeBytes, SHA256: fs})
+		}
+		m.Chunks = append(m.Chunks, mc)
+	}
+	return m, nil
 }

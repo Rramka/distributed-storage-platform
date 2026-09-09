@@ -56,12 +56,12 @@ func (s *Store) CreateFolder(ctx context.Context, ownerID, bucketID uuid.UUID, r
 func (s *Store) FileByID(ctx context.Context, ownerID, id uuid.UUID) (File, error) {
 	var f File
 	err := s.pool.QueryRow(ctx, `
-		SELECT f.id, f.bucket_id, f.path, f.is_folder, f.status, f.created_at, f.updated_at, f.deleted_at
+		SELECT f.id, f.bucket_id, f.path, f.is_folder, f.current_version, f.status, f.created_at, f.updated_at, f.deleted_at
 		FROM files f
 		JOIN buckets b ON b.id = f.bucket_id
 		WHERE f.id = $1 AND b.owner_id = $2 AND f.deleted_at IS NULL
 	`, id, ownerID).Scan(
-		&f.ID, &f.BucketID, &f.Path, &f.IsFolder, &f.Status, &f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
+		&f.ID, &f.BucketID, &f.Path, &f.IsFolder, &f.CurrentVersion, &f.Status, &f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
 	)
 	if err != nil {
 		return File{}, mapQueryErr("store.fileByID", err)

@@ -104,9 +104,9 @@ Audit scheduling: every fragment is challenged on a randomized interval averagin
 
 ## Transport security
 
-- **TLS 1.3 only**, everywhere. No plaintext listener exists anywhere in the system.
-- Customer ↔ platform: TLS + JWT/API key.
-- Node ↔ platform: mTLS (private CA), certificate-pinned both ways.
+- **TLS 1.3 only** on data-plane and node-control listeners. **Solo-track exception:** `GET /healthz` on every process is plaintext HTTP so Compose healthchecks can probe without a client certificate.
+- Customer ↔ platform: TLS + API key (JWT deferred).
+- Node ↔ platform: mTLS (private CA), certificate-pinned both ways. Registration and heartbeats are **HTTP/JSON** over that mTLS channel (gRPC deferred past M4).
 - Client ↔ node: TLS (node's platform-issued certificate, so clients verify they're talking to a registered node) + ticket authorization. Fragment bytes are already AES-256-GCM ciphertext — TLS here protects tickets and traffic metadata, not confidentiality of the payload.
 - Repair worker ↔ node: mTLS + tickets, same as clients.
 

@@ -16,7 +16,7 @@ sequenceDiagram
 
     C->>MS: GET /download/{file_id}
     MS-->>C: fragment map + Retrieval Tickets + hashes + wrapped FK
-    par fastest 10 of 16 per chunk
+    par M2: the single fragment per chunk (M3: fastest 10 of 16)
         C->>N: GET fragment + ticket
         N-->>C: ciphertext
         C->>C: verify SHA-256

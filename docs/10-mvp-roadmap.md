@@ -33,8 +33,8 @@ These remain specified in the docs for later phases. They are **out of the solo 
 
 - **W1** — Repo skeleton, AI operating system (rules, skills, hooks, MCP), Compose (Postgres/Redis/NATS), CI. Exit: `docker compose up` gives green health checks.
 - **W2–3** — Metadata service and gateway with API-key auth only. Exit: full metadata CRUD from the CLI.
-- **W4–5** — Node agent, fragment PUT/GET with tickets and receipts, naive scheduler, 16-agent Compose fleet. Exit: single-copy round trip.
-- **W6–7** — Client pipeline: Argon2id, streaming AES-256-GCM, 16 MB chunks, Reed-Solomon 10+6, plan/transfer/commit with resume. Exit: `dsp put` / `dsp get` byte-identical with 6 agents stopped.
+- **W4–5** — Node agent, fragment PUT/GET with tickets and receipts, naive scheduler, 5-agent Compose fleet, Argon2id + AES-256-GCM (no Reed-Solomon). Exit: single-copy encrypted round trip.
+- **W6–7** — Reed-Solomon 10+6, 16-way placement, plan/transfer/commit with resume. Exit: `dsp put` / `dsp get` byte-identical with 6 agents stopped.
 - **W8–9** — Health monitor state machine, NATS events, repair service, chaos harness. Exit: the M4 test — kill 6 of 16, back to 16/16, downloads never fail.
 - **W10** — Fleet visualizer web page and the scripted demo.
 - **W11** — Soak run, security review, red-team DB-dump fixture, invariant CI.
@@ -80,11 +80,11 @@ Users, buckets, files, folders, rename, soft delete; **API keys only** on the so
 **Exit:** full metadata CRUD via the CLI against a running gateway — no bytes stored yet.
 
 ### M2 — Node agent + happy-path storage (week 5–7)
-Agent with chunk store, registration ceremony (CA, mTLS), heartbeats to Redis liveness; fragment PUT/GET with tickets and receipts; naive scheduler (random online nodes, hard constraints only); CLI pipeline **without** erasure coding (single-copy fragments) to keep the slice thin.
-**Exit:** `dsp put Vacation.mp4 && dsp get Vacation.mp4` round-trips through 5 local agent containers, byte-identical.
+Agent with chunk store, registration ceremony (CA, mTLS), heartbeats to Redis liveness; fragment PUT/GET with tickets and receipts; naive scheduler (random online nodes, hard constraints only); CLI pipeline **with** Argon2id + streaming AES-256-GCM + 16 MB chunking, **without** erasure coding (single-copy fragments) so invariant 2 holds from the first stored byte.
+**Exit:** `dsp put Vacation.mp4 && dsp get Vacation.mp4` round-trips through 5 local agent containers, byte-identical. Invariant 1 (≥12 healthy placements) does not apply until M3's 10+6.
 
-### M3 — Client-side encryption + erasure coding (week 8–9)
-Full pipeline from [04-storage-pipeline.md](04-storage-pipeline.md): Argon2id key derivation, AES-256-GCM streaming encryption, wrapped file keys, Reed–Solomon 10+6, plan/transfer/commit protocol with resume, hash verification at every hop.
+### M3 — Erasure coding (week 8–9)
+Reed–Solomon 10+6 on the existing encrypted chunks, plan/transfer/commit with 16-way placement, hash verification at every hop.
 **Exit:** round-trip succeeds with any 6 of 16 agents stopped; plaintext never observable on any node's disk (asserted by test).
 
 ### M4 — Health, repair, self-healing (week 10–12)

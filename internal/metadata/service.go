@@ -19,6 +19,8 @@ var (
 	ErrUnauthenticated = errors.New("metadata: unauthenticated")
 	ErrInvalid         = errors.New("metadata: invalid request")
 	ErrForbidden       = errors.New("metadata: forbidden")
+	ErrIncomplete      = store.ErrIncomplete
+	ErrUnavailable     = store.ErrUnavailable
 )
 
 // Service is the metadata operations the gateway calls.
@@ -37,11 +39,21 @@ type Service interface {
 	GetFile(ctx context.Context, userID, fileID uuid.UUID) (store.File, error)
 	RenameFile(ctx context.Context, userID, fileID uuid.UUID, newPath string) (store.File, error)
 	DeleteFile(ctx context.Context, userID, fileID uuid.UUID) error
+	MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error)
+	ListNodes(ctx context.Context, userID uuid.UUID) ([]store.Node, error)
+	RegisterNode(ctx context.Context, code string, csr []byte, endpoint, osName, version, label string, capacity int64) (store.Node, string, error)
+	HeartbeatNode(ctx context.Context, nodeID uuid.UUID, used, capacity int64) error
+	PlanUpload(ctx context.Context, userID uuid.UUID, m store.UploadManifest) (PlanResult, error)
+	CommitUpload(ctx context.Context, userID, uploadID uuid.UUID, receipts []string) (store.File, store.FileVersion, error)
+	PlanDownload(ctx context.Context, userID, fileID uuid.UUID) (DownloadResult, error)
 }
 
 // StoreService implements Service against Postgres.
 type StoreService struct {
-	Store *store.Store
+	Store      *store.Store
+	IssueNode  func(csr []byte, nodeID uuid.UUID, endpoint string) (certPEM []byte, pub []byte, fp []byte, expires time.Time, err error)
+	SignTicket func(op string, fragmentID, nodeID uuid.UUID, sha []byte, maxBytes uint64) (string, time.Time, error)
+	Place      func(ctx context.Context, needs []PlaceNeed) ([]PlaceAssign, error)
 }
 
 func (s *StoreService) CreateUser(ctx context.Context, email, password string) (store.User, error) {

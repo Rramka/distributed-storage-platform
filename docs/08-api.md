@@ -143,15 +143,15 @@ Optional `?version=` (defaults to current). Response: everything the client need
 | `POST /nodes/{id}/drain` | Graceful retirement — migrate data off, no reputation penalty. |
 | `GET /earnings` | Provider ledger view: accrued credits by node, window, and type. |
 
-## Node control API (gRPC over mTLS)
+## Node control API (HTTP/JSON over mTLS)
 
-| RPC | Direction | Purpose |
+Solo track: HTTP/JSON, not gRPC (gRPC is deferred past M4). Heartbeats are request/response; the JSON body includes a `messages` array so M4 can push expiry lists and challenges without a protocol change.
+
+| HTTP | Direction | Purpose |
 |---|---|---|
-| `RegisterNode(CSR, registration_code)` | agent → platform | Identity ceremony; returns signed certificate + node ID |
-| `Heartbeat(stream)` | bidirectional stream | Agent sends heartbeats every 10 s; platform pushes expiry lists, challenges, drain orders, update notices on the same stream |
-| `ConfirmDeletions(fragment_ids)` | agent → platform | GC confirmations, flips placements to `deleted` |
-| `ReconcileInventory(digest)` | agent → platform | Periodic drift check between local index and placement map |
-| `RenewCertificate(CSR)` | agent → platform | 30-day cert rotation over the existing authenticated channel |
+| `POST /internal/nodes/register` | agent → metadata | Identity ceremony (CSR + registration code); returns signed certificate + node ID |
+| `POST /internal/heartbeat` | agent → healthmon | Agent sends heartbeats every 10 s over mTLS; platform returns `{ "messages": [] }` |
+| ConfirmDeletions / ReconcileInventory / RenewCertificate | — | M4+ |
 
 ## Node fragment API (HTTPS on each node, data plane)
 

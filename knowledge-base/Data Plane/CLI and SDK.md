@@ -9,7 +9,7 @@ aliases:
 
 # CLI and SDK
 
-Customer client. In M1 it does metadata CRUD (`register`, `api-keys`, `buckets`, `folders`, `ls`, `mv`, `rm`) against the [[API Gateway]]. **All transform work lives here from M2/M3**: [[Client-side Encryption]], chunking, hashing, [[Erasure Coding]]. The [[Control Plane]] only coordinates.
+Customer client. **M2:** `dsp put` / `dsp get` encrypt with Argon2id + streaming AES-256-GCM, 16 MB chunks, one fragment per chunk (no Reed–Solomon yet). Also `nodes` and `provider codes create`. Env: `DSP_API_URL` `DSP_API_KEY` `DSP_PASSPHRASE` `DSP_CA_FILE`.
 
 ## Upload (product `dsp put`)
 

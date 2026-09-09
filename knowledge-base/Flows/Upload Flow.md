@@ -18,11 +18,11 @@ sequenceDiagram
     participant SC as Scheduler
     participant N as Node Agent
 
-    C->>C: Encrypt, chunk, hash, erasure-code
+    C->>C: Encrypt (AES-256-GCM), chunk 16 MB, hash. M2: one fragment per chunk (no RS yet)
     C->>GW: POST /upload (manifest)
     GW->>MS: Plan upload
     MS->>SC: Request placement
-    SC-->>MS: 16 nodes per chunk
+    SC-->>MS: online live nodes (naive random; M2 hard constraint = one fragment per node per chunk)
     MS-->>C: Placement Tickets
     par parallel PUT
         C->>N: fragment + ticket

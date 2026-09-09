@@ -8,7 +8,7 @@ aliases:
 
 # Heartbeat Protocol
 
-[[Node Agent]] → [[Health Monitor]], every **10 seconds**, over a long-lived [[gRPC]] stream with [[mTLS]].
+[[Node Agent]] → [[Health Monitor]], every **10 seconds**, HTTP/JSON over [[mTLS]] (`POST /internal/heartbeat`). Response `{ "messages": [] }` is a slot for M4 control messages.
 
 Payload: free/used bytes, CPU, memory, fragment count, agent version, disk read p95, optional SMART temp.
 

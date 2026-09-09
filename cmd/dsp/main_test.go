@@ -34,7 +34,7 @@ func TestNoArgs(t *testing.T) {
 func TestUnknownCommand(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"put"}, &stdout, &stderr, nil); code != 2 {
+	if code := run([]string{"nope"}, &stdout, &stderr, nil); code != 2 {
 		t.Fatalf("exit %d", code)
 	}
 	if !strings.Contains(stderr.String(), "unknown command") {

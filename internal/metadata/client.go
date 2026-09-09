@@ -3,6 +3,8 @@ package metadata
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -162,6 +164,110 @@ func (c *Client) DeleteFile(ctx context.Context, userID, fileID uuid.UUID) error
 	return c.do(ctx, http.MethodDelete, "/internal/users/"+userID.String()+"/files/"+fileID.String(), nil, http.StatusNoContent, nil)
 }
 
+func (c *Client) MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error) {
+	var out struct {
+		ID        uuid.UUID `json:"id"`
+		Endpoint  string    `json:"endpoint"`
+		ExpiresAt time.Time `json:"expires_at"`
+		Secret    string    `json:"secret"`
+	}
+	err := c.do(ctx, http.MethodPost, "/internal/users/"+userID.String()+"/registration-codes", map[string]string{"endpoint": endpoint}, http.StatusCreated, &out)
+	return store.RegistrationCode{ID: out.ID, OwnerID: userID, Endpoint: out.Endpoint, ExpiresAt: out.ExpiresAt}, out.Secret, err
+}
+
+func (c *Client) ListNodes(ctx context.Context, userID uuid.UUID) ([]store.Node, error) {
+	var out struct {
+		Nodes []store.Node `json:"nodes"`
+	}
+	err := c.do(ctx, http.MethodGet, "/internal/users/"+userID.String()+"/nodes", nil, http.StatusOK, &out)
+	return out.Nodes, err
+}
+
+func (c *Client) RegisterNode(ctx context.Context, code string, csr []byte, endpoint, osName, version, label string, capacity int64) (store.Node, string, error) {
+	var out struct {
+		NodeID   string `json:"node_id"`
+		CertPEM  string `json:"cert_pem"`
+		Endpoint string `json:"endpoint"`
+	}
+	err := c.do(ctx, http.MethodPost, "/internal/nodes/register", map[string]any{
+		"registration_code": code,
+		"csr":               encodeB64(csr),
+		"endpoint":          endpoint,
+		"os":                osName,
+		"agent_version":     version,
+		"hostname_label":    label,
+		"capacity_bytes":    capacity,
+	}, http.StatusCreated, &out)
+	id, _ := uuid.Parse(out.NodeID)
+	return store.Node{ID: id, Endpoint: out.Endpoint}, out.CertPEM, err
+}
+
+func encodeB64(b []byte) string {
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+func manifestJSON(m store.UploadManifest) map[string]any {
+	chunks := make([]map[string]any, 0, len(m.Chunks))
+	for _, ch := range m.Chunks {
+		frags := make([]map[string]any, 0, len(ch.Fragments))
+		for _, fr := range ch.Fragments {
+			frags = append(frags, map[string]any{
+				"shard_index": fr.ShardIndex,
+				"sha256":      hex.EncodeToString(fr.SHA256),
+				"size_bytes":  fr.SizeBytes,
+			})
+		}
+		chunks = append(chunks, map[string]any{
+			"seq":        ch.Seq,
+			"sha256":     hex.EncodeToString(ch.SHA256),
+			"size_bytes": ch.SizeBytes,
+			"fragments":  frags,
+		})
+	}
+	return map[string]any{
+		"bucket_id":       m.BucketID.String(),
+		"path":            m.Path,
+		"size_bytes":      m.SizeBytes,
+		"content_sha256":  hex.EncodeToString(m.ContentSHA256),
+		"encryption_meta": json.RawMessage(m.EncryptionMeta),
+		"chunk_size":      m.ChunkSize,
+		"ec":              map[string]int{"data": int(m.ECData), "parity": int(m.ECParity)},
+		"chunks":          chunks,
+	}
+}
+
+type ctxKeyRequestID struct{}
+
+func (c *Client) HeartbeatNode(ctx context.Context, nodeID uuid.UUID, used, capacity int64) error {
+	return c.do(ctx, http.MethodPost, "/internal/nodes/"+nodeID.String()+"/heartbeat", map[string]int64{
+		"used_bytes":     used,
+		"capacity_bytes": capacity,
+	}, http.StatusOK, nil)
+}
+
+func (c *Client) PlanUpload(ctx context.Context, userID uuid.UUID, m store.UploadManifest) (PlanResult, error) {
+	body := manifestJSON(m)
+	var res PlanResult
+	err := c.do(ctx, http.MethodPost, "/internal/users/"+userID.String()+"/upload", body, http.StatusCreated, &res)
+	return res, err
+}
+
+func (c *Client) CommitUpload(ctx context.Context, userID, uploadID uuid.UUID, recs []string) (store.File, store.FileVersion, error) {
+	var out struct {
+		FileID    uuid.UUID `json:"file_id"`
+		VersionNo int       `json:"version_no"`
+		Status    string    `json:"status"`
+	}
+	err := c.do(ctx, http.MethodPost, "/internal/users/"+userID.String()+"/upload/"+uploadID.String()+"/commit", map[string]any{"receipts": recs}, http.StatusOK, &out)
+	return store.File{ID: out.FileID}, store.FileVersion{VersionNo: out.VersionNo, Status: out.Status}, err
+}
+
+func (c *Client) PlanDownload(ctx context.Context, userID, fileID uuid.UUID) (DownloadResult, error) {
+	var res DownloadResult
+	err := c.do(ctx, http.MethodGet, "/internal/users/"+userID.String()+"/download/"+fileID.String(), nil, http.StatusOK, &res)
+	return res, err
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body any, want int, dst any) error {
 	var rdr io.Reader
 	if body != nil {
@@ -211,8 +317,6 @@ func (c *Client) do(ctx context.Context, method, path string, body any, want int
 	}
 	return nil
 }
-
-type ctxKeyRequestID struct{}
 
 // WithRequestID stores the public request id on ctx for outbound calls.
 func WithRequestID(ctx context.Context, id string) context.Context {

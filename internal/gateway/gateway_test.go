@@ -202,6 +202,28 @@ func (m *fakeMeta) DeleteFile(_ context.Context, userID, fileID uuid.UUID) error
 	return nil
 }
 
+func (m *fakeMeta) MintRegistrationCode(_ context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return store.RegistrationCode{ID: uuid.New(), OwnerID: userID, Endpoint: endpoint, ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now()}, "reg_testsecret", nil
+}
+func (m *fakeMeta) ListNodes(_ context.Context, _ uuid.UUID) ([]store.Node, error) {
+	return []store.Node{}, nil
+}
+func (m *fakeMeta) RegisterNode(_ context.Context, _ string, _ []byte, _ string, _ string, _ string, _ string, _ int64) (store.Node, string, error) {
+	return store.Node{}, "", metadata.ErrInvalid
+}
+func (m *fakeMeta) HeartbeatNode(_ context.Context, _ uuid.UUID, _, _ int64) error { return nil }
+func (m *fakeMeta) PlanUpload(_ context.Context, _ uuid.UUID, _ store.UploadManifest) (metadata.PlanResult, error) {
+	return metadata.PlanResult{}, metadata.ErrInvalid
+}
+func (m *fakeMeta) CommitUpload(_ context.Context, _, _ uuid.UUID, _ []string) (store.File, store.FileVersion, error) {
+	return store.File{}, store.FileVersion{}, metadata.ErrInvalid
+}
+func (m *fakeMeta) PlanDownload(_ context.Context, _, _ uuid.UUID) (metadata.DownloadResult, error) {
+	return metadata.DownloadResult{}, metadata.ErrNotFound
+}
+
 func testServer(t *testing.T, meta metadata.Service) http.Handler {
 	t.Helper()
 	mr := miniredis.RunT(t)

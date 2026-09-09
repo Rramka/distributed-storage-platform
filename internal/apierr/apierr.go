@@ -9,14 +9,16 @@ import (
 )
 
 const (
-	CodeInvalidRequest  = "invalid_request"
-	CodeUnauthenticated = "unauthenticated"
-	CodeForbidden       = "forbidden"
-	CodeNotFound        = "not_found"
-	CodeConflict        = "conflict"
-	CodeAlreadyExists   = "already_exists"
-	CodeRateLimited     = "rate_limited"
-	CodeInternal        = "internal"
+	CodeInvalidRequest       = "invalid_request"
+	CodeUnauthenticated      = "unauthenticated"
+	CodeForbidden            = "forbidden"
+	CodeNotFound             = "not_found"
+	CodeConflict             = "conflict"
+	CodeAlreadyExists        = "already_exists"
+	CodeRateLimited          = "rate_limited"
+	CodeInternal             = "internal"
+	CodeManifestInvalid      = "manifest_invalid"
+	CodePlacementUnavailable = "placement_unavailable"
 )
 
 // Envelope is the JSON body for every non-2xx response.
@@ -34,7 +36,7 @@ type Body struct {
 // Status maps an error code to its HTTP status.
 func Status(code string) int {
 	switch code {
-	case CodeInvalidRequest:
+	case CodeInvalidRequest, CodeManifestInvalid:
 		return http.StatusBadRequest
 	case CodeUnauthenticated:
 		return http.StatusUnauthorized
@@ -46,6 +48,8 @@ func Status(code string) int {
 		return http.StatusConflict
 	case CodeRateLimited:
 		return http.StatusTooManyRequests
+	case CodePlacementUnavailable:
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}

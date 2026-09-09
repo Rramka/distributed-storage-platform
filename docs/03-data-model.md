@@ -164,10 +164,30 @@ CREATE TABLE nodes (
     -- pending | online | suspect | offline | draining | quarantined | retired
     reputation      REAL NOT NULL DEFAULT 0.5,  -- 0..1, see 06-scheduler-and-repair.md
     registered_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at    TIMESTAMPTZ
+    last_seen_at    TIMESTAMPTZ,
+    public_key      BYTEA NOT NULL,             -- Ed25519 public key; receipts verified against this
+    cert_pem        TEXT NOT NULL,              -- issued leaf (PEM)
+    cert_expires_at TIMESTAMPTZ
 );
 
 CREATE INDEX nodes_selectable ON nodes (status, reputation DESC) WHERE status = 'online';
+```
+
+`public_key` is stored separately from `cert_fingerprint` so upload commit can verify node receipts after the certificate rotates.
+
+One-time agent bind codes (solo track; `POST /nodes/registration-codes` in [08-api.md](08-api.md)):
+
+```sql
+CREATE TABLE node_registration_codes (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id    UUID NOT NULL REFERENCES users(id),
+    code_hash   TEXT NOT NULL UNIQUE,           -- sha256 of the secret; secret shown once
+    endpoint    TEXT NOT NULL,                  -- host:port the node will advertise; clamps cert SANs
+    expires_at  TIMESTAMPTZ NOT NULL,
+    used_at     TIMESTAMPTZ,
+    node_id     UUID REFERENCES nodes(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
 Real-time liveness (last heartbeat, seconds-level) lives in **Redis** with TTL keys, not Postgres. Postgres holds durable state transitions and slow-moving attributes.

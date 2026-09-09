@@ -14,13 +14,10 @@ Design goals, in order: **do no harm to the host**, **be verifiably honest**, **
 
 ## Internals
 
-- Fragment API (HTTPS) — PUT/GET/DELETE + `GET /challenge`, authorized by tickets
-- Heartbeat loop — [[gRPC]] stream to [[Health Monitor]]
-- Chunk store — fragment files + bbolt `meta.db` + WAL journal
-- Integrity auditor — local SHA-256 scrub (~every two weeks, throttled)
-- GC worker — expired fragments
-- Bandwidth / resource limiter — token bucket, low I/O priority, target RSS < 150 MB
-- Self-updater — signed releases, staged rollout
+- Fragment API (HTTPS) — PUT/GET/DELETE, authorized by [[Placement Ticket]] / [[Retrieval Ticket]]. `GET /challenge` is M4.
+- Heartbeat loop — HTTP/JSON POST every 10s over [[mTLS]] to [[Health Monitor]] (gRPC deferred past M4)
+- Chunk store — fragment files fanned by ID prefix + bbolt `meta.db`
+- Deferred to M4: integrity auditor, GC worker, bandwidth limiter, self-updater
 
 ## On-disk
 

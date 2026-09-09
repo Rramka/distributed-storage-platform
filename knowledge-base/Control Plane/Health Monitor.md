@@ -11,7 +11,7 @@ Fan-in point for the node fleet.
 
 ## Heartbeats
 
-Every [[Node Agent]] holds a long-lived [[gRPC]] stream over [[mTLS]] and sends a [[Heartbeat Protocol]] message every **10 seconds**. Liveness is a [[Redis]] key with TTL — expiry means presumed offline. Durable attributes and hourly [[Node Stats]] land in [[Postgres]].
+Every [[Node Agent]] POSTs HTTP/JSON over [[mTLS]] (`POST /internal/heartbeat`) every **10 seconds**. Liveness is a [[Redis]] key `node:live:<id>` with 30s TTL. Durable `last_seen_at` / `used_bytes` land in [[Postgres]]. `suspect`/`offline` transitions and [[NATS JetStream]] events are M4.
 
 State machine: `online` → 3 missed beats → `suspect` (no new placements) → 5 minutes silent → `offline` (repair evaluation). Events go to [[NATS JetStream]] (`node.offline`, etc.).
 

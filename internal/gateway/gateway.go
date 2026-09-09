@@ -3,6 +3,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -64,6 +65,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/files/{id}", s.with(authKey, s.handleGetFile))
 	s.mux.HandleFunc("PUT /v1/rename", s.with(authKeyWrite, s.handleRename))
 	s.mux.HandleFunc("DELETE /v1/file/{id}", s.with(authKeyWrite, s.handleDeleteFile))
+
+	s.mux.HandleFunc("POST /v1/nodes/registration-codes", s.with(authKeyWrite, s.handleMintCode))
+	s.mux.HandleFunc("GET /v1/nodes", s.with(authKey, s.handleListNodes))
+	s.mux.HandleFunc("POST /v1/upload", s.with(authKeyWrite, s.handlePlanUpload))
+	s.mux.HandleFunc("POST /v1/upload/{id}/commit", s.with(authKeyWrite, s.handleCommitUpload))
+	s.mux.HandleFunc("GET /v1/download/{id}", s.with(authKey, s.handlePlanDownload))
 
 	s.mux.HandleFunc("/{path...}", s.handleNotFound)
 }
@@ -140,6 +147,18 @@ func (s *Server) with(kind authKind, next http.HandlerFunc) http.HandlerFunc {
 			}
 			if s.limit != nil && r.Method == http.MethodGet {
 				res, err := s.limit.AllowRead(ctx, id.User.ID.String())
+				if err != nil {
+					apierr.Write(w, apierr.CodeInternal, "internal error", rid)
+					return
+				}
+				if !res.Allowed {
+					w.Header().Set("Retry-After", formatRetry(res.RetryAfter))
+					apierr.Write(w, apierr.CodeRateLimited, "rate limited", rid)
+					return
+				}
+			}
+			if s.limit != nil && (r.URL.Path == "/v1/upload" || strings.HasSuffix(r.URL.Path, "/commit") || strings.HasPrefix(r.URL.Path, "/v1/download/")) {
+				res, err := s.limit.AllowPlan(ctx, id.User.ID.String())
 				if err != nil {
 					apierr.Write(w, apierr.CodeInternal, "internal error", rid)
 					return
@@ -389,6 +408,161 @@ func (s *Server) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handleMintCode(w http.ResponseWriter, r *http.Request) {
+	id := mustIdentity(r)
+	var req struct {
+		Endpoint string `json:"endpoint"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	c, secret, err := s.meta.MintRegistrationCode(r.Context(), id.User.ID, req.Endpoint)
+	if err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id":         c.ID.String(),
+		"endpoint":   c.Endpoint,
+		"expires_at": c.ExpiresAt.UTC().Format(time.RFC3339),
+		"secret":     secret,
+	})
+}
+
+func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
+	id := mustIdentity(r)
+	nodes, err := s.meta.ListNodes(r.Context(), id.User.ID)
+	if err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	if nodes == nil {
+		nodes = []store.Node{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": nodes})
+}
+
+func (s *Server) handlePlanUpload(w http.ResponseWriter, r *http.Request) {
+	id := mustIdentity(r)
+	m, err := decodeUploadManifest(r)
+	if err != nil {
+		apierr.Write(w, apierr.CodeManifestInvalid, "manifest invalid", requestID(r))
+		return
+	}
+	res, err := s.meta.PlanUpload(r.Context(), id.User.ID, m)
+	if err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"upload_id":  res.UploadID.String(),
+		"file_id":    res.FileID.String(),
+		"expires_at": res.ExpiresAt.UTC().Format(time.RFC3339),
+		"placements": res.Placements,
+	})
+}
+
+func (s *Server) handleCommitUpload(w http.ResponseWriter, r *http.Request) {
+	id := mustIdentity(r)
+	uid, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		apierr.Write(w, apierr.CodeInvalidRequest, "invalid request", requestID(r))
+		return
+	}
+	var req struct {
+		Receipts []string `json:"receipts"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	f, v, err := s.meta.CommitUpload(r.Context(), id.User.ID, uid, req.Receipts)
+	if err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"file_id":    f.ID.String(),
+		"version_no": v.VersionNo,
+		"status":     v.Status,
+	})
+}
+
+func (s *Server) handlePlanDownload(w http.ResponseWriter, r *http.Request) {
+	id := mustIdentity(r)
+	fid, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		apierr.Write(w, apierr.CodeInvalidRequest, "invalid request", requestID(r))
+		return
+	}
+	res, err := s.meta.PlanDownload(r.Context(), id.User.ID, fid)
+	if err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func decodeUploadManifest(r *http.Request) (store.UploadManifest, error) {
+	var jm struct {
+		BucketID       string          `json:"bucket_id"`
+		Path           string          `json:"path"`
+		SizeBytes      int64           `json:"size_bytes"`
+		ContentSHA256  string          `json:"content_sha256"`
+		EncryptionMeta json.RawMessage `json:"encryption_meta"`
+		ChunkSize      int             `json:"chunk_size"`
+		EC             struct {
+			Data   int `json:"data"`
+			Parity int `json:"parity"`
+		} `json:"ec"`
+		Chunks []struct {
+			Seq       int    `json:"seq"`
+			SHA256    string `json:"sha256"`
+			SizeBytes int    `json:"size_bytes"`
+			Fragments []struct {
+				ShardIndex int    `json:"shard_index"`
+				SHA256     string `json:"sha256"`
+				SizeBytes  int    `json:"size_bytes"`
+			} `json:"fragments"`
+		} `json:"chunks"`
+	}
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&jm); err != nil {
+		return store.UploadManifest{}, err
+	}
+	bid, err := uuid.Parse(jm.BucketID)
+	if err != nil {
+		return store.UploadManifest{}, err
+	}
+	sum, err := hex.DecodeString(jm.ContentSHA256)
+	if err != nil {
+		return store.UploadManifest{}, err
+	}
+	m := store.UploadManifest{
+		BucketID: bid, Path: jm.Path, SizeBytes: jm.SizeBytes, ContentSHA256: sum,
+		EncryptionMeta: jm.EncryptionMeta, ChunkSize: jm.ChunkSize,
+		ECData: int16(jm.EC.Data), ECParity: int16(jm.EC.Parity),
+	}
+	if m.ECData == 0 {
+		m.ECData = 1
+	}
+	for _, ch := range jm.Chunks {
+		cs, err := hex.DecodeString(ch.SHA256)
+		if err != nil {
+			return store.UploadManifest{}, err
+		}
+		mc := store.ManifestChunk{Seq: ch.Seq, SizeBytes: ch.SizeBytes, SHA256: cs}
+		for _, fr := range ch.Fragments {
+			fs, err := hex.DecodeString(fr.SHA256)
+			if err != nil {
+				return store.UploadManifest{}, err
+			}
+			mc.Fragments = append(mc.Fragments, store.ManifestFragment{ShardIndex: int16(fr.ShardIndex), SizeBytes: fr.SizeBytes, SHA256: fs})
+		}
+		m.Chunks = append(m.Chunks, mc)
+	}
+	return m, nil
+}
+
 func (s *Server) writeMeta(w http.ResponseWriter, r *http.Request, err error) {
 	rid := requestID(r)
 	var ce *metadata.CallError
@@ -409,6 +583,10 @@ func (s *Server) writeMeta(w http.ResponseWriter, r *http.Request, err error) {
 		apierr.Write(w, apierr.CodeAlreadyExists, "already exists", rid)
 	case errors.Is(err, metadata.ErrNotEmpty), errors.Is(err, store.ErrNotEmpty):
 		apierr.Write(w, apierr.CodeConflict, "bucket is not empty", rid)
+	case errors.Is(err, metadata.ErrIncomplete), errors.Is(err, store.ErrIncomplete):
+		apierr.Write(w, apierr.CodeConflict, "too few fragments confirmed", rid)
+	case errors.Is(err, metadata.ErrUnavailable), errors.Is(err, store.ErrUnavailable):
+		apierr.Write(w, apierr.CodePlacementUnavailable, "placement unavailable", rid)
 	default:
 		slog.Error("metadata call failed", "err", err, "request_id", rid)
 		apierr.Write(w, apierr.CodeInternal, "internal error", rid)

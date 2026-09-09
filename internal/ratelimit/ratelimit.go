@@ -91,3 +91,8 @@ func (l *Limiter) AllowAuth(ctx context.Context, ip string) (Result, error) {
 func (l *Limiter) AllowRead(ctx context.Context, userID string) (Result, error) {
 	return l.Allow(ctx, "rl:read:"+userID, ReadLimit, time.Minute)
 }
+
+// AllowPlan is 60/min per account for upload/download planning.
+func (l *Limiter) AllowPlan(ctx context.Context, userID string) (Result, error) {
+	return l.Allow(ctx, "rl:plan:"+userID, PlanLimit, time.Minute)
+}

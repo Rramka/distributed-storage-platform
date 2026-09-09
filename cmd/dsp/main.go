@@ -39,6 +39,14 @@ func run(args []string, stdout, stderr io.Writer, getenv getenvFunc) int {
 		err = cmdMV(args[1:], stdout, stderr, c)
 	case "rm":
 		err = cmdRM(args[1:], stdout, stderr, c)
+	case "put":
+		err = cmdPut(args[1:], stdout, stderr, c, getenv)
+	case "get":
+		err = cmdGet(args[1:], stdout, stderr, c, getenv)
+	case "nodes":
+		err = cmdNodes(args[1:], stdout, stderr, c)
+	case "provider":
+		err = cmdProvider(args[1:], stdout, stderr, c)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", args[0])
 		printUsage(stderr)
@@ -61,7 +69,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  ls                    list files/folders")
 	fmt.Fprintln(w, "  mv                    rename a file or folder")
 	fmt.Fprintln(w, "  rm                    soft-delete a file or folder")
-	fmt.Fprintln(w, "env: DSP_API_URL DSP_API_KEY DSP_EMAIL DSP_PASSWORD")
+	fmt.Fprintln(w, "  put                   upload a local file (encrypted)")
+	fmt.Fprintln(w, "  get                   download a file")
+	fmt.Fprintln(w, "  nodes                 list provider nodes")
+	fmt.Fprintln(w, "  provider codes create mint an agent registration code")
+	fmt.Fprintln(w, "env: DSP_API_URL DSP_API_KEY DSP_EMAIL DSP_PASSWORD DSP_PASSPHRASE DSP_CA_FILE")
 }
 
 func envOr(getenv getenvFunc, key, fallback string) string {

@@ -69,7 +69,7 @@ Solid lines carry metadata and control messages. Dotted lines carry encrypted fr
 The single public HTTP entry point for customers and the dashboard.
 
 - Terminates TLS, authenticates requests (**API keys** on the solo builder track; JWT access tokens are deferred until after M4), enforces per-account rate limits.
-- Routes to internal services. **Solo track (M1):** the gateway talks to metadata over internal HTTP/JSON so the metadata CRUD slice does not block on a protobuf toolchain. gRPC is introduced in M2 with the node control API. Performs request validation and shapes errors into the common format defined in [08-api.md](08-api.md).
+- Routes to internal services. **Solo track:** the gateway talks to metadata over internal HTTP/JSON. The node control API (registration, heartbeats) is also HTTP/JSON over mTLS — protobuf/gRPC is deferred until after M4. Performs request validation and shapes errors into the common format defined in [08-api.md](08-api.md).
 - Stateless — scale horizontally behind a load balancer.
 
 ### Metadata Service — the "brain"
