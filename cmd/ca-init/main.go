@@ -3,6 +3,8 @@ package main
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strconv"
 
 	"github.com/Rramka/distributed-storage-platform/internal/ca"
 	"github.com/Rramka/distributed-storage-platform/internal/tickets"
@@ -38,5 +40,28 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if err := maybeChown(dir); err != nil {
+		slog.Error("ca-init chown", "err", err)
+		os.Exit(1)
+	}
 	slog.Info("ca ready", "dir", dir)
+}
+
+// maybeChown gives the non-root control-plane user (compose uid 10001) read
+// access to ca.key (mode 0600) without world-readable keys.
+func maybeChown(dir string) error {
+	raw := os.Getenv("CA_OWNER_UID")
+	if raw == "" {
+		return nil
+	}
+	uid, err := strconv.Atoi(raw)
+	if err != nil {
+		return err
+	}
+	return filepath.Walk(dir, func(path string, _ os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chown(path, uid, uid)
+	})
 }

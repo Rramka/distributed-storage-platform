@@ -59,14 +59,18 @@ func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte
 	if code == "" || len(csr) == 0 {
 		return store.Node{}, "", ErrInvalid
 	}
-	nodeID := uuid.New()
-	rc, err := s.Store.ConsumeRegistrationCode(ctx, hashSecret(code), nodeID)
+	hashed := hashSecret(code)
+	rc, err := s.Store.RegistrationCodeByHash(ctx, hashed)
 	if err != nil {
-		if err == store.ErrConflict {
-			return store.Node{}, "", ErrConflict
-		}
 		return store.Node{}, "", err
 	}
+	if rc.UsedAt != nil {
+		return store.Node{}, "", ErrConflict
+	}
+	if time.Now().After(rc.ExpiresAt) {
+		return store.Node{}, "", ErrNotFound
+	}
+	nodeID := uuid.New()
 	certPEM, pub, fp, expires, err := s.IssueNode(csr, nodeID, rc.Endpoint)
 	if err != nil {
 		return store.Node{}, "", err
@@ -94,6 +98,12 @@ func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte
 		CapacityBytes:   capacity,
 	})
 	if err != nil {
+		return store.Node{}, "", err
+	}
+	if _, err := s.Store.ConsumeRegistrationCode(ctx, hashed, n.ID); err != nil {
+		if err == store.ErrConflict {
+			return store.Node{}, "", ErrConflict
+		}
 		return store.Node{}, "", err
 	}
 	return n, string(certPEM), nil

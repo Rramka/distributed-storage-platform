@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-09-09 (M2 node agent + encrypted single-copy round trip)
+Last updated: 2026-09-09 (compose: CA key perms + node register FK)
 
 ## Current milestone
 
@@ -23,6 +23,10 @@ Exit criteria: `dsp put` / `dsp get` round-trips byte-identical through 5 local 
 ## Blocked
 
 - Nothing. Next work is M3 (Reed-Solomon 10+6, 16-way placement).
+
+## Notes
+
+- `ca-init` chowns `/ca` to uid 10001 (`CA_OWNER_UID`) so metadata/healthmon can read `ca.key` (0600). Existing Postgres volumes need `make migrate` for `000003_nodes_registration.sql`. Node register now inserts the `nodes` row before binding `node_registration_codes.node_id` (FK).
 
 ## Next three tasks
 

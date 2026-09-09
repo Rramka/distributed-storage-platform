@@ -24,6 +24,7 @@ func (s *Store) MintRegistrationCode(ctx context.Context, ownerID uuid.UUID, cod
 }
 
 // ConsumeRegistrationCode marks a unused, unexpired code as used and binds nodeID.
+// The node row must already exist (node_id is a FK to nodes).
 func (s *Store) ConsumeRegistrationCode(ctx context.Context, codeHash string, nodeID uuid.UUID) (RegistrationCode, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

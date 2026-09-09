@@ -52,6 +52,7 @@ services:
         SERVICE: ca-init
     environment:
       CA_DIR: /ca
+      CA_OWNER_UID: "10001"
       <<: *ticket
     volumes:
       - ca_data:/ca
