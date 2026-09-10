@@ -43,6 +43,9 @@ type CreateNodeParams struct {
 	HostnameLabel   string
 	OS              string
 	AgentVersion    string
+	Country         string
+	Region          string
+	ASN             *int
 	Endpoint        string
 	CapacityBytes   int64
 }
@@ -55,10 +58,10 @@ func (s *Store) CreateNode(ctx context.Context, p CreateNodeParams) (Node, error
 	n, err := scanNode(s.pool.QueryRow(ctx, `
 		INSERT INTO nodes (
 			id, owner_id, cert_fingerprint, public_key, cert_pem, cert_expires_at,
-			hostname_label, os, agent_version, endpoint, capacity_bytes, status
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending')
+			hostname_label, os, agent_version, country, region, asn, endpoint, capacity_bytes, status
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending')
 		RETURNING `+nodeCols, p.ID, p.OwnerID, p.CertFingerprint, p.PublicKey, p.CertPEM, p.CertExpiresAt,
-		nullIfEmpty(p.HostnameLabel), p.OS, p.AgentVersion, p.Endpoint, p.CapacityBytes,
+		nullIfEmpty(p.HostnameLabel), p.OS, p.AgentVersion, nullIfEmpty(p.Country), nullIfEmpty(p.Region), p.ASN, p.Endpoint, p.CapacityBytes,
 	))
 	if err != nil {
 		return Node{}, mapQueryErr("store.createNode", err)

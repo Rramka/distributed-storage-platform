@@ -1,5 +1,5 @@
-// Package scheduler picks online nodes for fragment placements (naive M2).
-// docs/06-scheduler-and-repair.md — hard constraints only; scoring is M4.
+// Package scheduler picks online nodes for fragment placements.
+// docs/06-scheduler-and-repair.md — hard constraints in M3; scoring is M4.
 package scheduler
 
 import (
@@ -20,6 +20,13 @@ import (
 
 const liveKeyPrefix = "node:live:"
 const reservePrefix = "reserve:"
+
+// Hard placement caps (docs/06-scheduler-and-repair.md).
+const (
+	RegionCap = 3
+	ASNCap    = 3
+	OwnerCap  = 2
+)
 
 var (
 	ErrUnavailable = errors.New("scheduler: no eligible nodes")
@@ -45,7 +52,9 @@ type Service struct {
 	TTL   time.Duration
 }
 
-// Place selects distinct online live nodes per chunk.
+// Place selects distinct online live nodes per chunk under hard caps.
+// Unplaceable fragments are omitted (partial fill); PlanUpload rejects
+// a chunk that cannot reach the commit threshold.
 func (s *Service) Place(ctx context.Context, needs []Need) ([]Assignment, error) {
 	if s.TTL <= 0 {
 		s.TTL = 15 * time.Minute
@@ -68,17 +77,17 @@ func (s *Service) Place(ctx context.Context, needs []Need) ([]Assignment, error)
 		return nil, ErrUnavailable
 	}
 
-	usedInChunk := map[uuid.UUID]map[uuid.UUID]struct{}{}
+	usedInChunk := map[uuid.UUID]*chunkUse{}
 	out := make([]Assignment, 0, len(needs))
 	for _, need := range needs {
 		if usedInChunk[need.ChunkID] == nil {
-			usedInChunk[need.ChunkID] = map[uuid.UUID]struct{}{}
+			usedInChunk[need.ChunkID] = newChunkUse()
 		}
 		n, err := pick(live, usedInChunk[need.ChunkID])
 		if err != nil {
-			return nil, err
+			continue
 		}
-		usedInChunk[need.ChunkID][n.ID] = struct{}{}
+		usedInChunk[need.ChunkID].add(n)
 		key := reservePrefix + n.ID.String() + ":" + need.FragmentID.String()
 		if err := s.Redis.Set(ctx, key, need.SizeBytes, s.TTL).Err(); err != nil {
 			return nil, fmt.Errorf("scheduler.place: %w", err)
@@ -88,17 +97,42 @@ func (s *Service) Place(ctx context.Context, needs []Need) ([]Assignment, error)
 	return out, nil
 }
 
-func pick(nodes []store.Node, used map[uuid.UUID]struct{}) (store.Node, error) {
+type chunkUse struct {
+	nodes   map[uuid.UUID]struct{}
+	regions map[string]int
+	asns    map[int]int
+	owners  map[uuid.UUID]int
+}
+
+func newChunkUse() *chunkUse {
+	return &chunkUse{
+		nodes:   map[uuid.UUID]struct{}{},
+		regions: map[string]int{},
+		asns:    map[int]int{},
+		owners:  map[uuid.UUID]int{},
+	}
+}
+
+func (u *chunkUse) add(n store.Node) {
+	u.nodes[n.ID] = struct{}{}
+	if n.Region != "" {
+		u.regions[n.Region]++
+	}
+	if n.ASN != nil {
+		u.asns[*n.ASN]++
+	}
+	u.owners[n.OwnerID]++
+}
+
+func pick(nodes []store.Node, used *chunkUse) (store.Node, error) {
 	var cand []store.Node
 	for _, n := range nodes {
-		if _, ok := used[n.ID]; ok {
+		if !eligible(n, used) {
 			continue
 		}
 		cand = append(cand, n)
 	}
 	if len(cand) == 0 {
-		// M2: reuse a node across chunks only; same chunk must be unique.
-		// If a chunk needs more nodes than exist, fail.
 		return store.Node{}, ErrUnavailable
 	}
 	i, err := rand.Int(rand.Reader, big.NewInt(int64(len(cand))))
@@ -106,6 +140,25 @@ func pick(nodes []store.Node, used map[uuid.UUID]struct{}) (store.Node, error) {
 		return store.Node{}, err
 	}
 	return cand[int(i.Int64())], nil
+}
+
+func eligible(n store.Node, used *chunkUse) bool {
+	if _, ok := used.nodes[n.ID]; ok {
+		return false
+	}
+	if n.Region != "" && used.regions[n.Region] >= RegionCap {
+		return false
+	}
+	if n.ASN != nil && used.asns[*n.ASN] >= ASNCap {
+		return false
+	}
+	if used.owners[n.OwnerID] >= OwnerCap {
+		return false
+	}
+	if n.CapacityBytes-n.UsedBytes <= 0 {
+		return false
+	}
+	return true
 }
 
 // Mount registers POST /internal/placements.

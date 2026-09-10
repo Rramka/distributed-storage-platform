@@ -31,15 +31,15 @@ func mintRegSecret() (string, error) {
 }
 
 // MintRegistrationCode creates a one-time agent bind code.
-func (s *StoreService) MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error) {
-	if endpoint == "" {
+func (s *StoreService) MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint, country, region string, asn *int) (store.RegistrationCode, string, error) {
+	if endpoint == "" || country == "" || region == "" || asn == nil {
 		return store.RegistrationCode{}, "", ErrInvalid
 	}
 	secret, err := mintRegSecret()
 	if err != nil {
 		return store.RegistrationCode{}, "", err
 	}
-	c, err := s.Store.MintRegistrationCode(ctx, userID, hashSecret(secret), endpoint, time.Now().Add(codeTTL))
+	c, err := s.Store.MintRegistrationCode(ctx, userID, hashSecret(secret), endpoint, country, region, asn, time.Now().Add(codeTTL))
 	if err != nil {
 		return store.RegistrationCode{}, "", err
 	}
@@ -94,6 +94,9 @@ func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte
 		HostnameLabel:   label,
 		OS:              osName,
 		AgentVersion:    version,
+		Country:         rc.Country,
+		Region:          rc.Region,
+		ASN:             rc.ASN,
 		Endpoint:        rc.Endpoint,
 		CapacityBytes:   capacity,
 	})

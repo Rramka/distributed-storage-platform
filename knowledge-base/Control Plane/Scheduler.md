@@ -27,7 +27,9 @@ score = 0.20·capacity_headroom + 0.30·uptime_30d + 0.30·reputation
 
 [[Placement Constraints]]: one fragment per node; region / ASN caps of 3; owner cap of 2; must be `online`.
 
-**M2 (solo track):** naive placement — filter `online` + Redis live key + free space, **one fragment per node per chunk**, uniform random sample. No scoring, no region/ASN/owner caps yet (those land with 16-way placement in M3 / scoring in M4). Capacity reserved in Redis until the [[Placement Ticket]] expires.
+**M2 (solo track, superseded by M3):** naive placement — filter `online` + Redis live key + free space, **one fragment per node per chunk**, uniform random sample.
+
+**M3:** hard caps from [[Placement Constraints]] — one fragment per node; region / ASN caps of 3; owner cap of 2; `online` + free-space floor. Uniform random over the eligible set. Scoring and weighted sampling stay M4. `country` / `region` / `asn` are declared on the registration code, not by the agent.
 
 Capacity is reserved in Redis until the [[Placement Ticket]] expires, so abandoned uploads free space automatically.
 

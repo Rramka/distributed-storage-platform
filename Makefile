@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
-.PHONY: up down ps logs test test-short vet fmt migrate build fleet-up fleet-down fleet-seed
+.PHONY: up down ps logs test test-short vet fmt migrate build fleet-up fleet-down fleet-seed fleet-kill6
 
 up:
 	$(COMPOSE) up -d --build
@@ -16,6 +16,10 @@ fleet-down:
 
 fleet-seed:
 	$(COMPOSE) up fleet-seed --build
+
+# Stop 6 of 16 agents for the M3 durability check (docs/10-mvp-roadmap.md § M3).
+fleet-kill6:
+	$(COMPOSE) kill agent11 agent12 agent13 agent14 agent15 agent16
 
 export-ca:
 	@mkdir -p .local

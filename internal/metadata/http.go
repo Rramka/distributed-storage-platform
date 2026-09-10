@@ -301,17 +301,23 @@ func Mount(mux *http.ServeMux, svc Service) {
 		}
 		var req struct {
 			Endpoint string `json:"endpoint"`
+			Country  string `json:"country"`
+			Region   string `json:"region"`
+			ASN      *int   `json:"asn"`
 		}
 		if !decode(w, r, &req) {
 			return
 		}
-		c, secret, err := svc.MintRegistrationCode(r.Context(), userID, req.Endpoint)
+		c, secret, err := svc.MintRegistrationCode(r.Context(), userID, req.Endpoint, req.Country, req.Region, req.ASN)
 		if writeErr(w, r, err) {
 			return
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"id":         c.ID.String(),
 			"endpoint":   c.Endpoint,
+			"country":    c.Country,
+			"region":     c.Region,
+			"asn":        c.ASN,
 			"expires_at": c.ExpiresAt.UTC().Format(time.RFC3339),
 			"secret":     secret,
 		})

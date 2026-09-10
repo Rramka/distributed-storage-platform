@@ -1,5 +1,5 @@
-// Package pipeline is the client-side encryption, wrapping, and chunking path.
-// docs/04-storage-pipeline.md. Reed-Solomon is M3; M2 stores one fragment per chunk.
+// Package pipeline is the client-side encryption, wrapping, chunking, and
+// Reed-Solomon 10+6 path. docs/04-storage-pipeline.md.
 package pipeline
 
 import (
@@ -318,7 +318,7 @@ func openSegment(aead cipher.AEAD, dst io.Writer, prefix []byte, seq uint64, sea
 	return err
 }
 
-// ChunkInfo is one ciphertext chunk (M2: also the single fragment).
+// ChunkInfo is one ciphertext chunk (later split into 16 RS fragments).
 type ChunkInfo struct {
 	Seq       int
 	SizeBytes int

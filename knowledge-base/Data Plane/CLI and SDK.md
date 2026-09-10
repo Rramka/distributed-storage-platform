@@ -9,7 +9,7 @@ aliases:
 
 # CLI and SDK
 
-Customer client. **M2:** `dsp put` / `dsp get` encrypt with Argon2id + streaming AES-256-GCM, 16 MB chunks, one fragment per chunk (no Reed–Solomon yet). Also `nodes` and `provider codes create`. Env: `DSP_API_URL` `DSP_API_KEY` `DSP_PASSPHRASE` `DSP_CA_FILE`.
+Customer client. **M3:** `dsp put` / `dsp get` encrypt with Argon2id + streaming AES-256-GCM, 16 MB chunks, Reed–Solomon 10+6 (16 fragments). Also `nodes` and `provider codes create -endpoint -country -region -asn`. Env: `DSP_API_URL` `DSP_API_KEY` `DSP_PASSPHRASE` `DSP_CA_FILE`.
 
 ## Upload (product `dsp put`)
 

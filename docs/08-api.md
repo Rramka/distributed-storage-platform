@@ -137,7 +137,7 @@ Optional `?version=` (defaults to current). Response: everything the client need
 
 | Method & path | Behavior |
 |---|---|
-| `POST /nodes/registration-codes` | Provider generates a one-time code to bind a new agent install to their account. |
+| `POST /nodes/registration-codes` | Provider generates a one-time code to bind a new agent install to their account. Body: `{ "endpoint", "country", "region", "asn" }`. Placement attributes are platform-asserted (not agent-reported) and copied onto the node at register. |
 | `GET /nodes` | Provider's nodes: status, capacity, used bytes, reputation, uptime, last seen. |
 | `GET /nodes/{id}/stats?from=&to=` | Hourly rollups: uptime, audits, bytes served/ingested. |
 | `POST /nodes/{id}/drain` | Graceful retirement — migrate data off, no reputation penalty. |

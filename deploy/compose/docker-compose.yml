@@ -353,6 +353,292 @@ services:
       retries: 20
       start_period: 15s
 
+  agent6:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent6.code
+      ENDPOINT: 127.0.0.1:7448
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent6_data:/data
+    ports:
+      - "7448:7443"
+      - "9006:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent7:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent7.code
+      ENDPOINT: 127.0.0.1:7449
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent7_data:/data
+    ports:
+      - "7449:7443"
+      - "9007:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent8:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent8.code
+      ENDPOINT: 127.0.0.1:7450
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent8_data:/data
+    ports:
+      - "7450:7443"
+      - "9008:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent9:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent9.code
+      ENDPOINT: 127.0.0.1:7451
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent9_data:/data
+    ports:
+      - "7451:7443"
+      - "9009:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent10:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent10.code
+      ENDPOINT: 127.0.0.1:7452
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent10_data:/data
+    ports:
+      - "7452:7443"
+      - "9010:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent11:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent11.code
+      ENDPOINT: 127.0.0.1:7453
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent11_data:/data
+    ports:
+      - "7453:7443"
+      - "9011:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent12:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent12.code
+      ENDPOINT: 127.0.0.1:7454
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent12_data:/data
+    ports:
+      - "7454:7443"
+      - "9012:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent13:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent13.code
+      ENDPOINT: 127.0.0.1:7455
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent13_data:/data
+    ports:
+      - "7455:7443"
+      - "9013:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent14:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent14.code
+      ENDPOINT: 127.0.0.1:7456
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent14_data:/data
+    ports:
+      - "7456:7443"
+      - "9014:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent15:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent15.code
+      ENDPOINT: 127.0.0.1:7457
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent15_data:/data
+    ports:
+      - "7457:7443"
+      - "9015:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  agent16:
+    user: "0:0"
+    build: *agent-build
+    environment:
+      <<: *agent-env
+      REGISTRATION_CODE_FILE: /seed/agent16.code
+      ENDPOINT: 127.0.0.1:7458
+    volumes:
+      - ca_data:/ca:ro
+      - seed_data:/seed:ro
+      - agent16_data:/data
+    ports:
+      - "7458:7443"
+      - "9016:9000"
+    depends_on:
+      fleet-seed:
+        condition: service_completed_successfully
+      healthmon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
 volumes:
   postgres_data:
   ca_data:
@@ -362,3 +648,14 @@ volumes:
   agent3_data:
   agent4_data:
   agent5_data:
+  agent6_data:
+  agent7_data:
+  agent8_data:
+  agent9_data:
+  agent10_data:
+  agent11_data:
+  agent12_data:
+  agent13_data:
+  agent14_data:
+  agent15_data:
+  agent16_data:

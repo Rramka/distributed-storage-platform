@@ -202,10 +202,10 @@ func (m *fakeMeta) DeleteFile(_ context.Context, userID, fileID uuid.UUID) error
 	return nil
 }
 
-func (m *fakeMeta) MintRegistrationCode(_ context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error) {
+func (m *fakeMeta) MintRegistrationCode(_ context.Context, userID uuid.UUID, endpoint, country, region string, asn *int) (store.RegistrationCode, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return store.RegistrationCode{ID: uuid.New(), OwnerID: userID, Endpoint: endpoint, ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now()}, "reg_testsecret", nil
+	return store.RegistrationCode{ID: uuid.New(), OwnerID: userID, Endpoint: endpoint, Country: country, Region: region, ASN: asn, ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now()}, "reg_testsecret", nil
 }
 func (m *fakeMeta) ListNodes(_ context.Context, _ uuid.UUID) ([]store.Node, error) {
 	return []store.Node{}, nil

@@ -23,7 +23,7 @@ Explicitly out: compute, S3 API, real payments, sync clients, provider-set prici
 
 ## Milestones
 
-See [[Milestones]] for M0–M6 (foundations → metadata → happy-path encrypted storage → RS 10+6 → health/repair → ledger → dashboards). **Active work is M3 (erasure coding) after M2.** Encryption shipped in M2 so invariant 2 holds before 16-way placement.
+See [[Milestones]] for M0–M6 (foundations → metadata → happy-path encrypted storage → RS 10+6 → health/repair → ledger → dashboards). **M3 (erasure coding) is shipped.** Next is M4.
 
 M4 ([[Repair Loop]] + [[Storage Challenge]] + full [[Scheduler]] scoring) is the platform's core claim and gets the most test investment.
 

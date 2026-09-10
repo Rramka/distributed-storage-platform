@@ -7,16 +7,31 @@ import (
 	"github.com/google/uuid"
 )
 
-// MintRegistrationCode inserts a unused code.
-func (s *Store) MintRegistrationCode(ctx context.Context, ownerID uuid.UUID, codeHash, endpoint string, expiresAt time.Time) (RegistrationCode, error) {
+const codeCols = `id, owner_id, code_hash, endpoint, country, region, asn, expires_at, used_at, node_id, created_at`
+
+func scanCode(row interface{ Scan(dest ...any) error }) (RegistrationCode, error) {
 	var c RegistrationCode
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO node_registration_codes (owner_id, code_hash, endpoint, expires_at)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, owner_id, code_hash, endpoint, expires_at, used_at, node_id, created_at
-	`, ownerID, codeHash, endpoint, expiresAt).Scan(
-		&c.ID, &c.OwnerID, &c.CodeHash, &c.Endpoint, &c.ExpiresAt, &c.UsedAt, &c.NodeID, &c.CreatedAt,
+	var country, region *string
+	err := row.Scan(
+		&c.ID, &c.OwnerID, &c.CodeHash, &c.Endpoint, &country, &region, &c.ASN,
+		&c.ExpiresAt, &c.UsedAt, &c.NodeID, &c.CreatedAt,
 	)
+	if country != nil {
+		c.Country = *country
+	}
+	if region != nil {
+		c.Region = *region
+	}
+	return c, err
+}
+
+// MintRegistrationCode inserts an unused code with placement attributes.
+func (s *Store) MintRegistrationCode(ctx context.Context, ownerID uuid.UUID, codeHash, endpoint, country, region string, asn *int, expiresAt time.Time) (RegistrationCode, error) {
+	c, err := scanCode(s.pool.QueryRow(ctx, `
+		INSERT INTO node_registration_codes (owner_id, code_hash, endpoint, country, region, asn, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING `+codeCols, ownerID, codeHash, endpoint, nullIfEmpty(country), nullIfEmpty(region), asn, expiresAt,
+	))
 	if err != nil {
 		return RegistrationCode{}, mapQueryErr("store.mintRegistrationCode", err)
 	}
@@ -32,13 +47,12 @@ func (s *Store) ConsumeRegistrationCode(ctx context.Context, codeHash string, no
 	}
 	defer tx.Rollback(ctx)
 
-	var c RegistrationCode
-	err = tx.QueryRow(ctx, `
-		SELECT id, owner_id, code_hash, endpoint, expires_at, used_at, node_id, created_at
+	c, err := scanCode(tx.QueryRow(ctx, `
+		SELECT `+codeCols+`
 		FROM node_registration_codes
 		WHERE code_hash = $1
 		FOR UPDATE
-	`, codeHash).Scan(&c.ID, &c.OwnerID, &c.CodeHash, &c.Endpoint, &c.ExpiresAt, &c.UsedAt, &c.NodeID, &c.CreatedAt)
+	`, codeHash))
 	if err != nil {
 		return RegistrationCode{}, mapQueryErr("store.consumeRegistrationCode", err)
 	}
@@ -67,11 +81,9 @@ func (s *Store) ConsumeRegistrationCode(ctx context.Context, codeHash string, no
 
 // RegistrationCodeByHash loads a code.
 func (s *Store) RegistrationCodeByHash(ctx context.Context, codeHash string) (RegistrationCode, error) {
-	var c RegistrationCode
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, owner_id, code_hash, endpoint, expires_at, used_at, node_id, created_at
-		FROM node_registration_codes WHERE code_hash = $1
-	`, codeHash).Scan(&c.ID, &c.OwnerID, &c.CodeHash, &c.Endpoint, &c.ExpiresAt, &c.UsedAt, &c.NodeID, &c.CreatedAt)
+	c, err := scanCode(s.pool.QueryRow(ctx, `
+		SELECT `+codeCols+` FROM node_registration_codes WHERE code_hash = $1
+	`, codeHash))
 	if err != nil {
 		return RegistrationCode{}, mapQueryErr("store.registrationCodeByHash", err)
 	}

@@ -18,18 +18,18 @@ sequenceDiagram
     participant SC as Scheduler
     participant N as Node Agent
 
-    C->>C: Encrypt (AES-256-GCM), chunk 16 MB, hash. M2: one fragment per chunk (no RS yet)
+    C->>C: Encrypt (AES-256-GCM), chunk 16 MB, hash, Reed-Solomon 10+6
     C->>GW: POST /upload (manifest)
     GW->>MS: Plan upload
     MS->>SC: Request placement
-    SC-->>MS: online live nodes (naive random; M2 hard constraint = one fragment per node per chunk)
+    SC-->>MS: 16 nodes under hard caps (1/node, region≤3, ASN≤3, owner≤2)
     MS-->>C: Placement Tickets
     par parallel PUT
         C->>N: fragment + ticket
         N-->>C: Signed Receipt
     end
     C->>GW: POST /upload/commit
-    GW->>MS: Verify receipts, commit
+    GW->>MS: Verify receipts, commit if ≥ 14/16 stored per chunk
     MS-->>C: file_id, version
 ```
 

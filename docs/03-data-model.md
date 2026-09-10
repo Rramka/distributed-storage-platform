@@ -183,6 +183,9 @@ CREATE TABLE node_registration_codes (
     owner_id    UUID NOT NULL REFERENCES users(id),
     code_hash   TEXT NOT NULL UNIQUE,           -- sha256 of the secret; secret shown once
     endpoint    TEXT NOT NULL,                  -- host:port the node will advertise; clamps cert SANs
+    country     TEXT,                           -- ISO 3166-1; declared at mint, copied onto nodes
+    region      TEXT,
+    asn         INTEGER,                        -- ISP autonomous system, for diversity constraints
     expires_at  TIMESTAMPTZ NOT NULL,
     used_at     TIMESTAMPTZ,
     node_id     UUID REFERENCES nodes(id),

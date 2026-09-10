@@ -121,10 +121,31 @@ func (s *StoreService) PlanUpload(ctx context.Context, userID uuid.UUID, m store
 		}
 	}
 
+	perChunk := map[uuid.UUID]int{}
+	chunks := map[uuid.UUID]struct{}{}
+	for _, pf := range planned.Stored {
+		chunks[pf.Chunk.ID] = struct{}{}
+		perChunk[pf.Chunk.ID]++
+	}
+	for _, pf := range planned.Pending {
+		chunks[pf.Chunk.ID] = struct{}{}
+		if _, ok := byFrag[pf.Fragment.ID]; ok {
+			perChunk[pf.Chunk.ID]++
+		}
+	}
+	for id := range chunks {
+		if perChunk[id] < store.CommitThreshold {
+			return PlanResult{}, ErrUnavailable
+		}
+	}
+
 	var out []PlannedPlacement
 	var exp time.Time
 	for _, pf := range planned.Pending {
-		n := byFrag[pf.Fragment.ID]
+		n, ok := byFrag[pf.Fragment.ID]
+		if !ok {
+			continue
+		}
 		wire, until, err := s.SignTicket(tickets.OpPut, pf.Fragment.ID, n.ID, pf.Fragment.SHA256, uint64(pf.Fragment.SizeBytes))
 		if err != nil {
 			return PlanResult{}, err

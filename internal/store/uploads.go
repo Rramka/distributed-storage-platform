@@ -339,20 +339,22 @@ func (s *Store) CommitUpload(ctx context.Context, ownerID, versionID uuid.UUID, 
 		}
 	}
 
-	var missing int
+	var short int
 	err = tx.QueryRow(ctx, `
-		SELECT count(*) FROM fragments fr
-		JOIN chunks c ON c.id = fr.chunk_id
-		WHERE c.version_id = $1
-		  AND NOT EXISTS (
-		    SELECT 1 FROM fragment_placements p
-		    WHERE p.fragment_id = fr.id AND p.status = 'stored'
-		  )
-	`, versionID).Scan(&missing)
+		SELECT count(*) FROM (
+			SELECT c.id
+			FROM chunks c
+			JOIN fragments fr ON fr.chunk_id = c.id
+			LEFT JOIN fragment_placements p ON p.fragment_id = fr.id AND p.status = 'stored'
+			WHERE c.version_id = $1
+			GROUP BY c.id
+			HAVING count(p.id) < $2
+		) short_chunks
+	`, versionID, CommitThreshold).Scan(&short)
 	if err != nil {
 		return File{}, FileVersion{}, mapQueryErr("store.commitUpload", err)
 	}
-	if missing > 0 {
+	if short > 0 {
 		return File{}, FileVersion{}, ErrIncomplete
 	}
 

@@ -185,6 +185,94 @@ func TestOwnerIsolation(t *testing.T) {
 	}
 }
 
+func TestCommitThreshold(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		stored  int
+		wantErr error
+	}{
+		{"13 rejected", 13, ErrIncomplete},
+		{"14 commits", 14, nil},
+		{"15 commits", 15, nil},
+		{"16 commits", 16, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u, err := s.CreateUser(ctx, "ct-"+uuid.NewString()+"@example.com", "hash")
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := s.CreateBucket(ctx, u.ID, "b")
+			if err != nil {
+				t.Fatal(err)
+			}
+			sha := bytes32(1)
+			frags := make([]ManifestFragment, 16)
+			for i := range frags {
+				frags[i] = ManifestFragment{ShardIndex: int16(i), SizeBytes: 32, SHA256: bytes32(byte(i + 2))}
+			}
+			planned, err := s.BeginUpload(ctx, u.ID, UploadManifest{
+				BucketID:       b.ID,
+				Path:           "/f-" + uuid.NewString(),
+				SizeBytes:      100,
+				ContentSHA256:  sha,
+				EncryptionMeta: []byte(`{"algo":"aes-256-gcm"}`),
+				ChunkSize:      16 * 1024 * 1024,
+				ECData:         10,
+				ECParity:       6,
+				Chunks:         []ManifestChunk{{Seq: 0, SizeBytes: 100, SHA256: sha, Fragments: frags}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			node, err := s.CreateNode(ctx, CreateNodeParams{
+				OwnerID:         u.ID,
+				CertFingerprint: []byte(uuid.NewString()),
+				PublicKey:       bytes32(3),
+				CertPEM:         "pem",
+				CertExpiresAt:   time.Now().Add(time.Hour),
+				OS:              "linux",
+				AgentVersion:    "test",
+				Endpoint:        "127.0.0.1:9",
+				CapacityBytes:   1 << 30,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var rows []Placement
+			ids := make([]uuid.UUID, 0, len(planned.Pending))
+			for _, pf := range planned.Pending {
+				rows = append(rows, Placement{FragmentID: pf.Fragment.ID, NodeID: node.ID})
+				ids = append(ids, pf.Fragment.ID)
+			}
+			if err := s.InsertPlacements(ctx, rows); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = s.CommitUpload(ctx, u.ID, planned.Version.ID, ids[:tt.stored])
+			if tt.wantErr != nil {
+				if err != tt.wantErr {
+					t.Fatalf("got %v want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func bytes32(seed byte) []byte {
+	b := make([]byte, 32)
+	for i := range b {
+		b[i] = seed
+	}
+	return b
+}
+
 func stringsUpper(s string) string {
 	b := []byte(s)
 	for i, c := range b {

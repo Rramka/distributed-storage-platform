@@ -39,7 +39,7 @@ type Service interface {
 	GetFile(ctx context.Context, userID, fileID uuid.UUID) (store.File, error)
 	RenameFile(ctx context.Context, userID, fileID uuid.UUID, newPath string) (store.File, error)
 	DeleteFile(ctx context.Context, userID, fileID uuid.UUID) error
-	MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error)
+	MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint, country, region string, asn *int) (store.RegistrationCode, string, error)
 	ListNodes(ctx context.Context, userID uuid.UUID) ([]store.Node, error)
 	RegisterNode(ctx context.Context, code string, csr []byte, endpoint, osName, version, label string, capacity int64) (store.Node, string, error)
 	HeartbeatNode(ctx context.Context, nodeID uuid.UUID, used, capacity int64) error

@@ -412,11 +412,14 @@ func (s *Server) handleMintCode(w http.ResponseWriter, r *http.Request) {
 	id := mustIdentity(r)
 	var req struct {
 		Endpoint string `json:"endpoint"`
+		Country  string `json:"country"`
+		Region   string `json:"region"`
+		ASN      *int   `json:"asn"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	c, secret, err := s.meta.MintRegistrationCode(r.Context(), id.User.ID, req.Endpoint)
+	c, secret, err := s.meta.MintRegistrationCode(r.Context(), id.User.ID, req.Endpoint, req.Country, req.Region, req.ASN)
 	if err != nil {
 		s.writeMeta(w, r, err)
 		return
@@ -424,6 +427,9 @@ func (s *Server) handleMintCode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":         c.ID.String(),
 		"endpoint":   c.Endpoint,
+		"country":    c.Country,
+		"region":     c.Region,
+		"asn":        c.ASN,
 		"expires_at": c.ExpiresAt.UTC().Format(time.RFC3339),
 		"secret":     secret,
 	})

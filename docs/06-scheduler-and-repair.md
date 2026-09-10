@@ -51,9 +51,11 @@ For the 16 fragments of any single chunk:
 
 These caps keep the failure-independence assumption behind the durability math ([04-storage-pipeline.md](04-storage-pipeline.md)) honest: a regional power outage, an ISP failure, or one provider rage-quitting can each cost at most 3 fragments of any chunk — well inside the 6-fragment tolerance.
 
+**Solo track M3:** the hard caps are live. Selection is uniform-random over the eligible set. Scoring and weighted sampling remain M4. Placement attributes (`country`, `region`, `asn`) are declared by the provider when minting a registration code and copied onto the node at register — the agent cannot self-assert diversity.
+
 ### Selection algorithm
 
-For each chunk: filter by hard constraints → **weighted-random sample** 16 nodes with probability proportional to score (not top-16 — deterministic top-k would funnel all new data onto the same best nodes, creating hotspots and correlated risk) → reserve capacity in Redis and issue placement tickets. Reservations expire with the tickets, so abandoned uploads free capacity automatically.
+For each chunk: filter by hard constraints → **weighted-random sample** 16 nodes with probability proportional to score (not top-16 — deterministic top-k would funnel all new data onto the same best nodes, creating hotspots and correlated risk) → reserve capacity in Redis and issue placement tickets. Reservations expire with the tickets, so abandoned uploads free capacity automatically. **M3** uses uniform random among nodes that pass the hard caps; the weighted sample is M4.
 
 Client-supplied region hints (e.g. "prefer EU") bias `latency_factor` without overriding diversity constraints.
 

@@ -23,6 +23,10 @@ var (
 	ErrUnavailable = errors.New("store: placement unavailable")
 )
 
+// CommitThreshold is the per-chunk stored-placement count required to commit
+// (docs/04-storage-pipeline.md § Step 6). 14 of 16 leaves repair headroom.
+const CommitThreshold = 14
+
 // Store wraps a pgx pool.
 type Store struct {
 	pool *pgxpool.Pool
@@ -146,6 +150,9 @@ type RegistrationCode struct {
 	OwnerID   uuid.UUID  `json:"owner_id"`
 	CodeHash  string     `json:"-"`
 	Endpoint  string     `json:"endpoint"`
+	Country   string     `json:"country,omitempty"`
+	Region    string     `json:"region,omitempty"`
+	ASN       *int       `json:"asn,omitempty"`
 	ExpiresAt time.Time  `json:"expires_at"`
 	UsedAt    *time.Time `json:"used_at,omitempty"`
 	NodeID    *uuid.UUID `json:"node_id,omitempty"`

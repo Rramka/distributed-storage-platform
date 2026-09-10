@@ -31,7 +31,6 @@ flowchart TB
 - The **Master Key (MK)** is derived from the user's passphrase via Argon2id (or generated and stored in the OS keychain, with a printable recovery key). It never leaves the client.
 - The **File Key (FK)** is 32 random bytes generated per file version. The file is encrypted with FK using AES-256-GCM in a streaming construction: the file is processed in 64 KiB segments, each sealed with a derived nonce (segment counter) and authentication tag, so multi-GB files encrypt with constant memory and any tampered segment fails authentication on read.
 - FK is then **wrapped** (encrypted) under MK using **AES-256-GCM** (`"wrap": "aes-256-gcm"` in `encryption_meta`) and stored in `file_versions.encryption_meta` along with the KDF parameters and algorithm identifiers. (The original AES-KW wrap is deferred; Go has no stdlib AES-KW and the solo track does not hand-roll RFC 3394.)
-- **Solo track M2:** encryption, wrapping, 16 MB chunking, and hashing are live. Reed–Solomon is still M3 — each chunk is stored as a single fragment (`ec_data_shards=1`, `ec_parity_shards=0`, `shard_index=0`).
 
 This is why the zero-knowledge guarantee holds structurally, not by policy: the platform stores only the *wrapped* FK. Without MK — which only the customer has — the wrapped blob is useless. The platform could hand its entire database to an attacker and no file would be readable. The trade-off is equally structural: **a customer who loses their passphrase and recovery key loses their data**. There is no reset path, and this is stated in the product terms.
 

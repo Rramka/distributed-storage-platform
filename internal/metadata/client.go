@@ -164,15 +164,26 @@ func (c *Client) DeleteFile(ctx context.Context, userID, fileID uuid.UUID) error
 	return c.do(ctx, http.MethodDelete, "/internal/users/"+userID.String()+"/files/"+fileID.String(), nil, http.StatusNoContent, nil)
 }
 
-func (c *Client) MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error) {
+func (c *Client) MintRegistrationCode(ctx context.Context, userID uuid.UUID, endpoint, country, region string, asn *int) (store.RegistrationCode, string, error) {
 	var out struct {
 		ID        uuid.UUID `json:"id"`
 		Endpoint  string    `json:"endpoint"`
+		Country   string    `json:"country"`
+		Region    string    `json:"region"`
+		ASN       *int      `json:"asn"`
 		ExpiresAt time.Time `json:"expires_at"`
 		Secret    string    `json:"secret"`
 	}
-	err := c.do(ctx, http.MethodPost, "/internal/users/"+userID.String()+"/registration-codes", map[string]string{"endpoint": endpoint}, http.StatusCreated, &out)
-	return store.RegistrationCode{ID: out.ID, OwnerID: userID, Endpoint: out.Endpoint, ExpiresAt: out.ExpiresAt}, out.Secret, err
+	err := c.do(ctx, http.MethodPost, "/internal/users/"+userID.String()+"/registration-codes", map[string]any{
+		"endpoint": endpoint,
+		"country":  country,
+		"region":   region,
+		"asn":      asn,
+	}, http.StatusCreated, &out)
+	return store.RegistrationCode{
+		ID: out.ID, OwnerID: userID, Endpoint: out.Endpoint,
+		Country: out.Country, Region: out.Region, ASN: out.ASN, ExpiresAt: out.ExpiresAt,
+	}, out.Secret, err
 }
 
 func (c *Client) ListNodes(ctx context.Context, userID uuid.UUID) ([]store.Node, error) {

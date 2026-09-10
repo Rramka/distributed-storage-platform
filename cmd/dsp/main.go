@@ -72,7 +72,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  put                   upload a local file (encrypted)")
 	fmt.Fprintln(w, "  get                   download a file")
 	fmt.Fprintln(w, "  nodes                 list provider nodes")
-	fmt.Fprintln(w, "  provider codes create mint an agent registration code")
+	fmt.Fprintln(w, "  provider codes create mint an agent registration code (-endpoint -country -region -asn)")
 	fmt.Fprintln(w, "env: DSP_API_URL DSP_API_KEY DSP_EMAIL DSP_PASSWORD DSP_PASSPHRASE DSP_CA_FILE")
 }
 

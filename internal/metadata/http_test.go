@@ -164,8 +164,8 @@ func (m *mem) DeleteFile(_ context.Context, userID, fileID uuid.UUID) error {
 	return nil
 }
 
-func (m *mem) MintRegistrationCode(_ context.Context, userID uuid.UUID, endpoint string) (store.RegistrationCode, string, error) {
-	return store.RegistrationCode{ID: uuid.New(), OwnerID: userID, Endpoint: endpoint, ExpiresAt: time.Now().Add(time.Hour)}, "reg_test", nil
+func (m *mem) MintRegistrationCode(_ context.Context, userID uuid.UUID, endpoint, country, region string, asn *int) (store.RegistrationCode, string, error) {
+	return store.RegistrationCode{ID: uuid.New(), OwnerID: userID, Endpoint: endpoint, Country: country, Region: region, ASN: asn, ExpiresAt: time.Now().Add(time.Hour)}, "reg_test", nil
 }
 func (m *mem) ListNodes(_ context.Context, _ uuid.UUID) ([]store.Node, error) { return nil, nil }
 func (m *mem) RegisterNode(_ context.Context, _ string, _ []byte, _ string, _ string, _ string, _ string, _ int64) (store.Node, string, error) {

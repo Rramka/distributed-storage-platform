@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
@@ -11,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,14 +35,26 @@ func cmdNodes(args []string, stdout, stderr io.Writer, c *client) error {
 
 func cmdProvider(args []string, stdout, stderr io.Writer, c *client) error {
 	if len(args) < 2 || args[0] != "codes" || args[1] != "create" {
-		return fmt.Errorf("usage: dsp provider codes create -endpoint host:port")
+		return fmt.Errorf("usage: dsp provider codes create -endpoint host:port -country US -region us-east -asn 64501")
 	}
 	f := splitFlags(args[2:])
 	ep := f["endpoint"]
-	if ep == "" {
-		return fmt.Errorf("provider codes create requires -endpoint")
+	country := f["country"]
+	region := f["region"]
+	asnStr := f["asn"]
+	if ep == "" || country == "" || region == "" || asnStr == "" {
+		return fmt.Errorf("provider codes create requires -endpoint -country -region -asn")
 	}
-	_, raw, err := c.do(http.MethodPost, "/v1/nodes/registration-codes", map[string]string{"endpoint": ep}, false)
+	asn, err := strconv.Atoi(asnStr)
+	if err != nil {
+		return fmt.Errorf("provider codes create: invalid -asn")
+	}
+	_, raw, err := c.do(http.MethodPost, "/v1/nodes/registration-codes", map[string]any{
+		"endpoint": ep,
+		"country":  country,
+		"region":   region,
+		"asn":      asn,
+	}, false)
 	if err != nil {
 		return err
 	}
@@ -108,12 +122,16 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 	}
 
 	type chunkBuf struct {
-		info pipeline.ChunkInfo
-		data []byte
+		info   pipeline.ChunkInfo
+		shards [][]byte
 	}
 	var chunks []chunkBuf
 	if err := pipeline.SplitChunks(tmp, pipeline.DefaultChunk, func(ci pipeline.ChunkInfo, b []byte) error {
-		chunks = append(chunks, chunkBuf{info: ci, data: b})
+		shards, err := pipeline.EncodeChunk(b)
+		if err != nil {
+			return err
+		}
+		chunks = append(chunks, chunkBuf{info: ci, shards: shards})
 		return nil
 	}); err != nil {
 		return err
@@ -121,15 +139,20 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 
 	manChunks := make([]map[string]any, 0, len(chunks))
 	for _, ch := range chunks {
+		frags := make([]map[string]any, 0, len(ch.shards))
+		for i, sh := range ch.shards {
+			sum := sha256.Sum256(sh)
+			frags = append(frags, map[string]any{
+				"shard_index": i,
+				"sha256":      hex.EncodeToString(sum[:]),
+				"size_bytes":  len(sh),
+			})
+		}
 		manChunks = append(manChunks, map[string]any{
 			"seq":        ch.info.Seq,
 			"sha256":     hex.EncodeToString(ch.info.SHA256),
 			"size_bytes": ch.info.SizeBytes,
-			"fragments": []map[string]any{{
-				"shard_index": 0,
-				"sha256":      hex.EncodeToString(ch.info.SHA256),
-				"size_bytes":  ch.info.SizeBytes,
-			}},
+			"fragments":  frags,
 		})
 	}
 	body := map[string]any{
@@ -139,7 +162,7 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 		"content_sha256":  hex.EncodeToString(contentSHA),
 		"encryption_meta": json.RawMessage(metaJSON),
 		"chunk_size":      pipeline.DefaultChunk,
-		"ec":              map[string]int{"data": 1, "parity": 0},
+		"ec":              map[string]int{"data": pipeline.ECData, "parity": pipeline.ECParity},
 		"chunks":          manChunks,
 	}
 	_, raw, err := c.do(http.MethodPost, "/v1/upload", body, false)
@@ -160,22 +183,28 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return err
 	}
-	bySeq := map[int][]byte{}
+	type shardKey struct {
+		seq   int
+		index int16
+	}
+	byKey := map[shardKey][]byte{}
 	for _, ch := range chunks {
-		bySeq[ch.info.Seq] = ch.data
+		for i, sh := range ch.shards {
+			byKey[shardKey{seq: ch.info.Seq, index: int16(i)}] = sh
+		}
 	}
 	caCert, err := loadCA(getenv)
 	if err != nil {
 		return err
 	}
 	var receipts []string
+	okPerChunk := map[int]int{}
 	var mu sync.Mutex
-	errCh := make(chan error, len(plan.Placements))
-	sem := make(chan struct{}, 4)
+	sem := make(chan struct{}, 16)
 	var wg sync.WaitGroup
 	for _, p := range plan.Placements {
 		p := p
-		data := bySeq[p.ChunkSeq]
+		data := byKey[shardKey{seq: p.ChunkSeq, index: p.ShardIndex}]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -183,19 +212,18 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 			defer func() { <-sem }()
 			rec, err := putFragment(caCert, p.Endpoint, p.NodeID, p.FragmentID, p.Ticket, data)
 			if err != nil {
-				errCh <- err
 				return
 			}
 			mu.Lock()
 			receipts = append(receipts, rec)
+			okPerChunk[p.ChunkSeq]++
 			mu.Unlock()
 		}()
 	}
 	wg.Wait()
-	close(errCh)
-	for e := range errCh {
-		if e != nil {
-			return e
+	for _, ch := range chunks {
+		if okPerChunk[ch.info.Seq] < store.CommitThreshold {
+			return fmt.Errorf("chunk %d: %d fragments stored, need %d", ch.info.Seq, okPerChunk[ch.info.Seq], store.CommitThreshold)
 		}
 	}
 	_, raw, err = c.do(http.MethodPost, "/v1/upload/"+plan.UploadID+"/commit", map[string]any{"receipts": receipts}, false)
@@ -252,8 +280,11 @@ func cmdGet(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 		ContentSHA256  string          `json:"content_sha256"`
 		EncryptionMeta json.RawMessage `json:"encryption_meta"`
 		Chunks         []struct {
-			Seq       int `json:"seq"`
+			Seq       int    `json:"seq"`
+			SHA256    string `json:"sha256"`
+			SizeBytes int    `json:"size_bytes"`
 			Fragments []struct {
+				ShardIndex int16  `json:"shard_index"`
 				FragmentID string `json:"fragment_id"`
 				SHA256     string `json:"sha256"`
 				NodeID     string `json:"node_id"`
@@ -273,20 +304,22 @@ func cmdGet(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 	var cipherBuf bytes.Buffer
 	w := io.MultiWriter(&cipherBuf, h)
 	for _, ch := range dl.Chunks {
-		if len(ch.Fragments) == 0 {
-			return fmt.Errorf("no fragments for chunk %d", ch.Seq)
+		frags := make([]downloadFrag, 0, len(ch.Fragments))
+		for _, fr := range ch.Fragments {
+			frags = append(frags, downloadFrag{
+				ShardIndex: fr.ShardIndex,
+				FragmentID: fr.FragmentID,
+				SHA256:     fr.SHA256,
+				NodeID:     fr.NodeID,
+				Endpoint:   fr.Endpoint,
+				Ticket:     fr.Ticket,
+			})
 		}
-		fr := ch.Fragments[0]
-		data, err := getFragment(caCert, fr.Endpoint, fr.NodeID, fr.FragmentID, fr.Ticket)
+		chunk, err := fetchChunk(caCert, ch.Seq, ch.SHA256, ch.SizeBytes, frags)
 		if err != nil {
 			return err
 		}
-		sum := sha256.Sum256(data)
-		want, _ := hex.DecodeString(fr.SHA256)
-		if !bytes.Equal(sum[:], want) {
-			return fmt.Errorf("fragment hash mismatch")
-		}
-		if _, err := w.Write(data); err != nil {
+		if _, err := w.Write(chunk); err != nil {
 			return err
 		}
 	}
@@ -360,6 +393,79 @@ func loadCA(getenv getenvFunc) (*x509.Certificate, error) {
 	return ca.ParseCertificatePEM(b)
 }
 
+type downloadFrag struct {
+	ShardIndex int16
+	FragmentID string
+	SHA256     string
+	NodeID     string
+	Endpoint   string
+	Ticket     string
+}
+
+func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes int, frags []downloadFrag) ([]byte, error) {
+	if len(frags) == 0 {
+		return nil, fmt.Errorf("no fragments for chunk %d", seq)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	type hit struct {
+		idx  int16
+		data []byte
+	}
+	hits := make(chan hit, len(frags))
+	var wg sync.WaitGroup
+	for _, fr := range frags {
+		fr := fr
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			data, err := getFragment(ctx, caCert, fr.Endpoint, fr.NodeID, fr.FragmentID, fr.Ticket)
+			if err != nil {
+				return
+			}
+			sum := sha256.Sum256(data)
+			want, err := hex.DecodeString(fr.SHA256)
+			if err != nil || !bytes.Equal(sum[:], want) {
+				return
+			}
+			select {
+			case hits <- hit{idx: fr.ShardIndex, data: data}:
+			case <-ctx.Done():
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(hits)
+	}()
+	shards := make([][]byte, pipeline.ECTotal)
+	got := 0
+	for h := range hits {
+		if int(h.idx) < 0 || int(h.idx) >= pipeline.ECTotal || shards[h.idx] != nil {
+			continue
+		}
+		shards[h.idx] = h.data
+		got++
+		if got >= pipeline.ECData {
+			cancel()
+			break
+		}
+	}
+	if got < pipeline.ECData {
+		return nil, fmt.Errorf("chunk %d: only %d of %d shards", seq, got, pipeline.ECData)
+	}
+	chunk, err := pipeline.ReconstructChunk(shards, sizeBytes)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(chunk)
+	want, err := hex.DecodeString(chunkSHA)
+	if err != nil || !bytes.Equal(sum[:], want) {
+		return nil, fmt.Errorf("chunk %d hash mismatch", seq)
+	}
+	return chunk, nil
+}
+
 func putFragment(caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string, data []byte) (string, error) {
 	nid, err := uuid.Parse(nodeID)
 	if err != nil {
@@ -396,7 +502,7 @@ func putFragment(caCert *x509.Certificate, endpoint, nodeID, fragID, ticket stri
 	return out.Receipt, nil
 }
 
-func getFragment(caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string) ([]byte, error) {
+func getFragment(ctx context.Context, caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string) ([]byte, error) {
 	nid, err := uuid.Parse(nodeID)
 	if err != nil {
 		return nil, err
@@ -409,7 +515,7 @@ func getFragment(caCert *x509.Certificate, endpoint, nodeID, fragID, ticket stri
 		Timeout:   2 * time.Minute,
 		Transport: &http.Transport{TLSClientConfig: agent.ClientTLS(caCert, nid, host)},
 	}
-	req, err := http.NewRequest(http.MethodGet, "https://"+endpoint+"/fragments/"+fragID, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+endpoint+"/fragments/"+fragID, nil)
 	if err != nil {
 		return nil, err
 	}
