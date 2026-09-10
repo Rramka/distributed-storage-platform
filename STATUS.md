@@ -33,7 +33,9 @@ Exit criteria: `dsp put` / `dsp get` round-trips byte-identical with any 6 of 16
 
 Run the `session-brief` skill first. Do not start ledger, dashboards, JWT, challenges beyond the repair path, or S3.
 
-Compose is `deploy/compose/docker-compose.yml`. After `make up`, copy CA via `make export-ca` (`DSP_CA_FILE=.local/ca.crt`). Host Postgres is on **5433**. Ticket seed is the compose env `TICKET_SIGNING_SEED`. Existing volumes need `make migrate` for `000004_registration_code_placement.sql`.
+Compose is `deploy/compose/docker-compose.yml`. `make up` now waits for Postgres and applies migrations before starting the rest. After `make up`, copy CA via `make export-ca` (`DSP_CA_FILE=.local/ca.crt`). Host Postgres is on **5433**. Ticket seed is the compose env `TICKET_SIGNING_SEED`.
+
+If `fleet-seed` fails on an old M2 volume (5 leftover agents, auth 429), wipe and recreate: `make fleet-down && make up`. That is required so all 16 agents re-register with region/ASN/owner caps.
 
 Invariant 1 (≥12 healthy placements) applies from M3. Invariant 2 (no plaintext in `data_dir`) remains in force.
 

@@ -71,7 +71,7 @@ CREATE TABLE files (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at      TIMESTAMPTZ,
-    UNIQUE (bucket_id, path)
+    UNIQUE (bucket_id, path)                    -- live rows only; see files_bucket_path_live
 );
 
 CREATE INDEX files_bucket_prefix ON files (bucket_id, path text_pattern_ops);

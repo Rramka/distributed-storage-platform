@@ -135,8 +135,8 @@ func (s *Store) TouchNode(ctx context.Context, id uuid.UUID, usedBytes, capacity
 	_, err := s.pool.Exec(ctx, `
 		UPDATE nodes
 		SET last_seen_at = now(),
-		    used_bytes = $2,
-		    capacity_bytes = CASE WHEN $3 > 0 THEN $3 ELSE capacity_bytes END,
+		    used_bytes = $2::bigint,
+		    capacity_bytes = CASE WHEN $3::bigint > 0 THEN $3::bigint ELSE capacity_bytes END,
 		    status = CASE WHEN status = 'pending' THEN 'online' ELSE status END
 		WHERE id = $1
 	`, id, usedBytes, capacityBytes)

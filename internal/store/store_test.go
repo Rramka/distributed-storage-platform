@@ -265,6 +265,39 @@ func TestCommitThreshold(t *testing.T) {
 	}
 }
 
+func TestTouchNodeLargeCapacity(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "cap-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.CreateNode(ctx, CreateNodeParams{
+		OwnerID:         u.ID,
+		CertFingerprint: []byte(uuid.NewString()),
+		PublicKey:       bytes32(9),
+		CertPEM:         "pem",
+		CertExpiresAt:   time.Now().Add(time.Hour),
+		OS:              "linux",
+		AgentVersion:    "test",
+		Endpoint:        "127.0.0.1:1",
+		CapacityBytes:   5 << 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TouchNode(ctx, n.ID, 0, 5<<30); err != nil {
+		t.Fatalf("TouchNode 5GiB: %v", err)
+	}
+	got, err := s.NodeByID(ctx, n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "online" {
+		t.Fatalf("status %q", got.Status)
+	}
+}
+
 func bytes32(seed byte) []byte {
 	b := make([]byte, 32)
 	for i := range b {

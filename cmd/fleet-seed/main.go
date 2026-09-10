@@ -113,10 +113,9 @@ func main() {
 			"region":   a.Region,
 			"asn":      a.ASN,
 		})
-		req, _ := http.NewRequest(http.MethodPost, api+"/v1/nodes/registration-codes", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Api-Key", ownerKeys[a.Owner])
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := postRetry(api+"/v1/nodes/registration-codes", body, map[string]string{
+			"X-Api-Key": ownerKeys[a.Owner],
+		})
 		if err != nil {
 			slog.Error("code", "err", err)
 			os.Exit(1)
@@ -145,10 +144,14 @@ func main() {
 
 func mintAPIKey(api, email, pass, label string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"label": label})
-	req, _ := http.NewRequest(http.MethodPost, api+"/v1/auth/api-keys", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, api+"/v1/auth/api-keys", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
 	req.SetBasicAuth(email, pass)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := doRetry(req)
 	if err != nil {
 		return "", err
 	}
@@ -184,7 +187,7 @@ func waitHealthy(url string, d time.Duration) error {
 
 func postJSON(url string, body any, dst any) error {
 	b, _ := json.Marshal(body)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(b))
+	resp, err := postRetry(url, b, nil)
 	if err != nil {
 		return err
 	}
@@ -197,4 +200,48 @@ func postJSON(url string, body any, dst any) error {
 		return json.Unmarshal(raw, dst)
 	}
 	return nil
+}
+
+func postRetry(url string, body []byte, extra map[string]string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range extra {
+		req.Header.Set(k, v)
+	}
+	return doRetry(req)
+}
+
+func doRetry(req *http.Request) (*http.Response, error) {
+	for attempt := 0; attempt < 12; attempt++ {
+		r := req.Clone(req.Context())
+		if req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			r.Body = body
+		}
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusTooManyRequests {
+			return resp, nil
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		wait := 2 * time.Second
+		if v := resp.Header.Get("Retry-After"); v != "" {
+			if n, err := time.ParseDuration(v + "s"); err == nil {
+				wait = n
+			}
+		}
+		slog.Info("rate limited, retrying", "wait", wait, "attempt", attempt+1)
+		time.Sleep(wait)
+	}
+	return nil, fmt.Errorf("retries exhausted")
 }

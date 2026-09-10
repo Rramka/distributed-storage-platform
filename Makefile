@@ -3,6 +3,8 @@ COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 .PHONY: up down ps logs test test-short vet fmt migrate build fleet-up fleet-down fleet-seed fleet-kill6
 
 up:
+	$(COMPOSE) up -d --wait postgres
+	@$(MAKE) migrate
 	$(COMPOSE) up -d --build
 	@$(MAKE) export-ca
 
