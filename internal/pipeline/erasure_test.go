@@ -81,6 +81,42 @@ func TestReconstructAnyTenOfSixteen(t *testing.T) {
 	}
 }
 
+func TestReconstructShardsAnyTenOfSixteen(t *testing.T) {
+	t.Parallel()
+	const trials = 32
+	for i := 0; i < trials; i++ {
+		n := 1 + i*97
+		chunk := make([]byte, n)
+		if _, err := rand.Read(chunk); err != nil {
+			t.Fatal(err)
+		}
+		shards, err := EncodeChunk(chunk)
+		if err != nil {
+			t.Fatal(err)
+		}
+		orig := make([][]byte, ECTotal)
+		for i, s := range shards {
+			orig[i] = append([]byte(nil), s...)
+		}
+		drop := pickDistinct(t, ECParity, ECTotal)
+		partial := make([][]byte, ECTotal)
+		for i, s := range shards {
+			if drop[i] {
+				continue
+			}
+			partial[i] = append([]byte(nil), s...)
+		}
+		if err := ReconstructShards(partial); err != nil {
+			t.Fatalf("trial %d: %v", i, err)
+		}
+		for i := 0; i < ECTotal; i++ {
+			if !bytes.Equal(partial[i], orig[i]) {
+				t.Fatalf("trial %d shard %d mismatch", i, i)
+			}
+		}
+	}
+}
+
 func TestReconstructTooFewShards(t *testing.T) {
 	t.Parallel()
 	chunk := bytes.Repeat([]byte{0xab}, 200)

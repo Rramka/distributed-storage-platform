@@ -130,18 +130,82 @@ func (s *Store) ListOnlineNodes(ctx context.Context) ([]Node, error) {
 	return out, rows.Err()
 }
 
-// TouchNode updates liveness fields and flips pending → online.
+// TouchNode updates liveness fields and flips pending/suspect/offline → online.
 func (s *Store) TouchNode(ctx context.Context, id uuid.UUID, usedBytes, capacityBytes int64) error {
-	_, err := s.pool.Exec(ctx, `
+	_, _, err := s.TouchNodeStatus(ctx, id, usedBytes, capacityBytes)
+	return err
+}
+
+// TouchNodeStatus is TouchNode plus the previous and new status (for NATS events).
+func (s *Store) TouchNodeStatus(ctx context.Context, id uuid.UUID, usedBytes, capacityBytes int64) (from, to string, err error) {
+	err = s.pool.QueryRow(ctx, `
+		WITH old AS (
+			SELECT status FROM nodes WHERE id = $1
+		)
 		UPDATE nodes
 		SET last_seen_at = now(),
 		    used_bytes = $2::bigint,
 		    capacity_bytes = CASE WHEN $3::bigint > 0 THEN $3::bigint ELSE capacity_bytes END,
-		    status = CASE WHEN status = 'pending' THEN 'online' ELSE status END
+		    status = CASE
+				WHEN status IN ('pending', 'suspect', 'offline') THEN 'online'
+				ELSE status
+			END
 		WHERE id = $1
-	`, id, usedBytes, capacityBytes)
+		RETURNING (SELECT status FROM old), status
+	`, id, usedBytes, capacityBytes).Scan(&from, &to)
 	if err != nil {
-		return mapQueryErr("store.touchNode", err)
+		return "", "", mapQueryErr("store.touchNode", err)
 	}
-	return nil
+	return from, to, nil
+}
+
+// NodeTransition is one status change from TransitionStaleNodes.
+type NodeTransition struct {
+	ID   uuid.UUID
+	From string
+	To   string
+}
+
+// TransitionStaleNodes flips online→suspect after suspectAfter and
+// online/suspect→offline after offlineAfter. Only those two live states.
+func (s *Store) TransitionStaleNodes(ctx context.Context, suspectAfter, offlineAfter time.Duration) ([]NodeTransition, error) {
+	suspectSecs := int(suspectAfter.Seconds())
+	offlineSecs := int(offlineAfter.Seconds())
+	rows, err := s.pool.Query(ctx, `
+		WITH prev AS (
+			SELECT id, status AS old_status, last_seen_at
+			FROM nodes
+			WHERE status IN ('online', 'suspect')
+			  AND last_seen_at IS NOT NULL
+		)
+		UPDATE nodes n
+		SET status = CASE
+			WHEN p.last_seen_at < now() - ($2::int * interval '1 second') THEN 'offline'
+			WHEN p.old_status = 'online'
+			     AND p.last_seen_at < now() - ($1::int * interval '1 second') THEN 'suspect'
+			ELSE n.status
+		END
+		FROM prev p
+		WHERE n.id = p.id
+		  AND (
+			p.last_seen_at < now() - ($2::int * interval '1 second')
+			OR (p.old_status = 'online' AND p.last_seen_at < now() - ($1::int * interval '1 second'))
+		  )
+		RETURNING n.id, p.old_status, n.status
+	`, suspectSecs, offlineSecs)
+	if err != nil {
+		return nil, mapQueryErr("store.transitionStaleNodes", err)
+	}
+	defer rows.Close()
+	var out []NodeTransition
+	for rows.Next() {
+		var t NodeTransition
+		if err := rows.Scan(&t.ID, &t.From, &t.To); err != nil {
+			return nil, mapQueryErr("store.transitionStaleNodes", err)
+		}
+		if t.From != t.To {
+			out = append(out, t)
+		}
+	}
+	return out, rows.Err()
 }

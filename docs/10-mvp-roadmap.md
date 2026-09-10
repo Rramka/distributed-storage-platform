@@ -35,7 +35,7 @@ These remain specified in the docs for later phases. They are **out of the solo 
 - **W2–3** — Metadata service and gateway with API-key auth only. Exit: full metadata CRUD from the CLI.
 - **W4–5** — Node agent, fragment PUT/GET with tickets and receipts, naive scheduler, 5-agent Compose fleet, Argon2id + AES-256-GCM (no Reed-Solomon). Exit: single-copy encrypted round trip.
 - **W6–7** — Reed-Solomon 10+6, 16-way placement, plan/transfer/commit with resume. Exit: `dsp put` / `dsp get` byte-identical with 6 agents stopped.
-- **W8–9** — Health monitor state machine, NATS events, repair service, chaos harness. Exit: the M4 test — kill 6 of 16, back to 16/16, downloads never fail.
+- **W8–9** — Health monitor state machine, NATS events, repair service, chaos harness. Exit: the M4 test — kill 6 of 16, back to 16/16, downloads never fail. Challenges and scoring follow that exit.
 - **W10** — Fleet visualizer web page and the scripted demo.
 - **W11** — Soak run, security review, red-team DB-dump fixture, invariant CI.
 - **W12** — Demo video, deck, data room, landing page with waitlist.
@@ -88,8 +88,8 @@ Reed–Solomon 10+6 on the existing encrypted chunks, plan/transfer/commit with 
 **Exit:** round-trip succeeds with any 6 of 16 agents stopped; plaintext never observable on any node's disk (asserted by test).
 
 ### M4 — Health, repair, self-healing (week 10–12)
-Health Monitor state machine (`online → suspect → offline`), NATS events, Repair Service with priority queue, ciphertext reconstruction, flap handling; storage challenges with pre-computed challenge sets; scheduler upgraded to full scoring + weighted sampling ([06-scheduler-and-repair.md](06-scheduler-and-repair.md)).
-**Exit:** kill 6 of 16 agents holding a file; within minutes all chunks are back to 16/16 healthy on survivors + fresh nodes, download works throughout. This milestone is the platform's core claim — it gets the most test investment.
+Health Monitor state machine (`online → suspect → offline`), NATS events, Repair Service with priority queue, ciphertext reconstruction, flap handling. Storage challenges with pre-computed challenge sets and full scheduler scoring + weighted sampling ([06-scheduler-and-repair.md](06-scheduler-and-repair.md)) are a **follow-up slice after the exit test**.
+**Exit:** kill 6 of 16 agents holding a file; within minutes all chunks are back to 16/16 healthy on survivors + fresh nodes, download works throughout. This milestone is the platform's core claim — it gets the most test investment. The Compose fleet is 24 agents so 8 spares exist under the owner/region/ASN caps.
 
 ### M5 — Ledger + billing (week 13–14) — deferred on the solo track
 Usage event stream, double-entry ledger, hourly accruals, reliability multiplier, `GET /storage` and `GET /earnings`, quota enforcement ([09-billing-ledger.md](09-billing-ledger.md)).

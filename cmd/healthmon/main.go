@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/ca"
+	"github.com/Rramka/distributed-storage-platform/internal/events"
 	"github.com/Rramka/distributed-storage-platform/internal/healthmon"
 	"github.com/Rramka/distributed-storage-platform/internal/httpserver"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
@@ -24,8 +25,9 @@ func main() {
 	pg := os.Getenv("POSTGRES_URL")
 	redisURL := os.Getenv("REDIS_URL")
 	caDir := os.Getenv("CA_DIR")
-	if pg == "" || redisURL == "" || caDir == "" {
-		slog.Error("POSTGRES_URL, REDIS_URL, CA_DIR required")
+	natsURL := os.Getenv("NATS_URL")
+	if pg == "" || redisURL == "" || caDir == "" || natsURL == "" {
+		slog.Error("POSTGRES_URL, REDIS_URL, CA_DIR, NATS_URL required")
 		os.Exit(1)
 	}
 	st, err := store.Open(context.Background(), pg)
@@ -42,6 +44,13 @@ func main() {
 	rdb := redis.NewClient(opt)
 	defer rdb.Close()
 
+	bus, err := events.Connect(context.Background(), natsURL)
+	if err != nil {
+		slog.Error("healthmon nats", "err", err)
+		os.Exit(1)
+	}
+	defer bus.Close()
+
 	c, err := ca.EnsureCA(caDir)
 	if err != nil {
 		slog.Error("ca", "err", err)
@@ -54,7 +63,15 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	healthmon.Mount(mux, &healthmon.Server{Store: st, Redis: rdb})
+	healthmon.Mount(mux, &healthmon.Server{Store: st, Redis: rdb, Bus: bus})
+	suspect, offline := healthmon.DurationsFromEnv()
+	mon := &healthmon.Monitor{
+		Store:        st,
+		Bus:          bus,
+		SuspectAfter: suspect,
+		OfflineAfter: offline,
+	}
+	go mon.Run(context.Background())
 	addr := os.Getenv("HEARTBEAT_ADDR")
 	if addr == "" {
 		addr = ":8443"

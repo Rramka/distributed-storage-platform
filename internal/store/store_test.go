@@ -298,6 +298,77 @@ func TestTouchNodeLargeCapacity(t *testing.T) {
 	}
 }
 
+func TestTransitionStaleNodes(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "stale-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.CreateNode(ctx, CreateNodeParams{
+		OwnerID:         u.ID,
+		CertFingerprint: []byte(uuid.NewString()),
+		PublicKey:       bytes32(1),
+		CertPEM:         "pem",
+		CertExpiresAt:   time.Now().Add(time.Hour),
+		OS:              "linux",
+		AgentVersion:    "test",
+		Endpoint:        "127.0.0.1:9",
+		CapacityBytes:   1 << 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TouchNode(ctx, n.ID, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ForceNodeLastSeen(ctx, n.ID, time.Now().Add(-45*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := s.TransitionStaleNodes(ctx, 30*time.Second, 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, tr := range ts {
+		if tr.ID == n.ID {
+			found = true
+			if tr.From != "online" || tr.To != "suspect" {
+				t.Fatalf("got %+v", tr)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected suspect transition")
+	}
+	if err := s.ForceNodeLastSeen(ctx, n.ID, time.Now().Add(-6*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	ts, err = s.TransitionStaleNodes(ctx, 30*time.Second, 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found = false
+	for _, tr := range ts {
+		if tr.ID == n.ID {
+			found = true
+			if tr.To != "offline" {
+				t.Fatalf("got %+v", tr)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected offline transition")
+	}
+	from, to, err := s.TouchNodeStatus(ctx, n.ID, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if from != "offline" || to != "online" {
+		t.Fatalf("recovery %s -> %s", from, to)
+	}
+}
+
 func bytes32(seed byte) []byte {
 	b := make([]byte, 32)
 	for i := range b {

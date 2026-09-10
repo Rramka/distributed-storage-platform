@@ -51,11 +51,11 @@ For the 16 fragments of any single chunk:
 
 These caps keep the failure-independence assumption behind the durability math ([04-storage-pipeline.md](04-storage-pipeline.md)) honest: a regional power outage, an ISP failure, or one provider rage-quitting can each cost at most 3 fragments of any chunk — well inside the 6-fragment tolerance.
 
-**Solo track M3:** the hard caps are live. Selection is uniform-random over the eligible set. Scoring and weighted sampling remain M4. Placement attributes (`country`, `region`, `asn`) are declared by the provider when minting a registration code and copied onto the node at register — the agent cannot self-assert diversity.
+**Solo track M3:** the hard caps are live. Selection is uniform-random over the eligible set. Scoring and weighted sampling remain a post-exit M4 slice. Placement attributes (`country`, `region`, `asn`) are declared by the provider when minting a registration code and copied onto the node at register — the agent cannot self-assert diversity.
 
 ### Selection algorithm
 
-For each chunk: filter by hard constraints → **weighted-random sample** 16 nodes with probability proportional to score (not top-16 — deterministic top-k would funnel all new data onto the same best nodes, creating hotspots and correlated risk) → reserve capacity in Redis and issue placement tickets. Reservations expire with the tickets, so abandoned uploads free capacity automatically. **M3** uses uniform random among nodes that pass the hard caps; the weighted sample is M4.
+For each chunk: filter by hard constraints → **weighted-random sample** 16 nodes with probability proportional to score (not top-16 — deterministic top-k would funnel all new data onto the same best nodes, creating hotspots and correlated risk) → reserve capacity in Redis and issue placement tickets. Reservations expire with the tickets, so abandoned uploads free capacity automatically. **M3** uses uniform random among nodes that pass the hard caps; the weighted sample is a post-exit M4 slice. When placing repair fragments, existing pending/stored occupants of the chunk are seeded into the cap counters so the 1-per-node rule still holds.
 
 Client-supplied region hints (e.g. "prefer EU") bias `latency_factor` without overriding diversity constraints.
 
@@ -97,23 +97,30 @@ sequenceDiagram
     participant HM as Health Monitor
     participant Q as NATS repair stream
     participant RW as Repair Worker
+    participant MD as Metadata
     participant SC as Scheduler
     participant SN as Surviving Nodes
     participant NN as New Nodes
 
-    HM->>Q: node.offline / audit.failed / scrub.selfreport
-    Q->>RW: affected placements event
+    HM->>Q: node.offline
+    Q->>RW: node.offline
     RW->>RW: Mark placements lost, group by chunk
     RW->>RW: Skip chunks still >= 13 healthy
     RW->>Q: Enqueue repair jobs (priority by health count)
     Q->>RW: repair job (chunk_id)
+    RW->>MD: POST /internal/repair/chunks/{id}/plan
+    MD->>SC: Place missing fragments (same caps; occupants excluded)
+    MD-->>RW: GET tickets + PUT tickets + fragment hashes
     RW->>SN: Download any 10 healthy fragments (ciphertext)
-    RW->>RW: Verify hashes, RS-decode, re-encode missing shard indexes
-    RW->>SC: Request placements (same constraints as upload)
+    RW->>RW: Verify hashes, ReconstructShards, verify rebuilt hashes
     RW->>NN: PUT reconstructed fragments + tickets
     NN-->>RW: Signed receipts
-    RW->>RW: Commit new placements, update metadata
+    RW->>MD: POST /internal/repair/chunks/{id}/commit
 ```
+
+Tickets for repair PUTs and GETs are issued by the Metadata Service — the repair worker never holds `TICKET_SIGNING_SEED` ([07-security.md](07-security.md)). The scheduler is still the placement authority; metadata calls it during plan.
+
+**Solo-track M4 slice:** health state machine, NATS events, ciphertext repair, and the chaos harness are the exit-critical path. Storage challenges with pre-computed challenge sets and full scheduler scoring remain a follow-up slice after the kill-6 / heal-to-16/16 test.
 
 Triggers feeding the loop:
 
@@ -129,13 +136,15 @@ Properties worth noting:
 
 - **Repair never decrypts.** Reed–Solomon reconstruction operates on ciphertext shards; repair workers hold no keys and see no plaintext. The zero-knowledge guarantee survives the repair path.
 - **Idempotent and crash-safe.** A repair job re-checks chunk health before acting (the node may have come back — then the job is dropped and placements restored) and commits placements transactionally. A crashed worker's job simply redelivers via NATS.
-- **Flap handling.** Home machines reboot and resume. `offline` triggers repair evaluation, but fragments on a returning node are re-validated by challenge and count as healthy again — repair work in flight for them is cancelled. Only fragments actually reconstructed elsewhere cause the returning node's copies to be expired as surplus.
+- **Flap handling.** Home machines reboot and resume. `offline` triggers repair evaluation, but fragments on a returning node are re-validated and count as healthy again — repair work in flight for them is cancelled. Only fragments actually reconstructed elsewhere cause the returning node's copies to be expired as surplus. **Interim (until the challenge slice):** re-validation is a hash-verified ticketed GET of each lost placement, not a storage challenge.
 
 ### Repair throughput and mass failure
 
 Workers are stateless NATS consumers — throughput scales by adding workers. Two throttles protect the network:
 
 1. **Per-source-node bandwidth cap** — reconstruction downloads are spread across each chunk's 10+ surviving holders, so no single home connection is saturated by repair reads.
-2. **Global repair budget** — an operator-tunable ceiling on total repair bandwidth keeps a mass-failure event (regional outage taking out thousands of nodes) from stampeding the fleet; priority ordering ensures the most at-risk chunks are always repaired first within the budget.
+2. **Global repair budget** — an operator-tunable ceiling on total repair bandwidth (`REPAIR_BUDGET_MBPS`) keeps a mass-failure event from stampeding the fleet; priority ordering ensures the most at-risk chunks are always repaired first within the budget.
+
+**Compose note:** agents advertise `127.0.0.1:<port>` so the host CLI can reach published ports. The repair worker inside Compose rewrites that host via `REPAIR_ENDPOINT_HOST` (default `host.docker.internal`) while keeping TLS `ServerName` as the advertised address.
 
 Worked example: a node holding 200 GB dies. That's ~125,000 fragments across ~125,000 distinct chunks (placement spreads them widely). Each chunk needs one fragment (1.6 MB) rebuilt, sourcing 16 MB from ten different nodes. Total repair read traffic ≈ 2 TB spread across tens of thousands of source nodes — a few hundred KB each. No node notices, and at a modest 1 Gbps aggregate repair budget the whole event heals in under 5 hours, while the affected chunks sit at 15/16 healthy — nowhere near danger.

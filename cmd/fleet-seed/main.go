@@ -22,39 +22,35 @@ type agentSpec struct {
 }
 
 func fleet() []agentSpec {
-	// 16 agents, 8 owners × 2, regions 3/3/3/3/2/2, ASNs grouped independently.
+	// 24 agents, 12 owners × 2, 8 regions × 3, 8 ASNs × 3 — spare capacity for M4 repair.
 	regions := []string{
 		"us-east", "us-east", "us-east",
 		"us-west", "us-west", "us-west",
 		"eu-west", "eu-west", "eu-west",
 		"eu-central", "eu-central", "eu-central",
-		"ap-south", "ap-south",
-		"ap-northeast", "ap-northeast",
+		"ap-south", "ap-south", "ap-south",
+		"ap-northeast", "ap-northeast", "ap-northeast",
+		"sa-east", "sa-east", "sa-east",
+		"af-south", "af-south", "af-south",
 	}
 	countries := []string{
 		"US", "US", "US",
 		"US", "US", "US",
 		"IE", "IE", "IE",
 		"DE", "DE", "DE",
-		"IN", "IN",
-		"JP", "JP",
+		"IN", "IN", "IN",
+		"JP", "JP", "JP",
+		"BR", "BR", "BR",
+		"ZA", "ZA", "ZA",
 	}
-	asns := []int{
-		64501, 64502, 64503,
-		64504, 64505, 64506,
-		64501, 64502, 64503,
-		64504, 64505, 64506,
-		64501, 64502,
-		64503, 64504,
-	}
-	out := make([]agentSpec, 16)
-	for i := 0; i < 16; i++ {
+	out := make([]agentSpec, 24)
+	for i := 0; i < 24; i++ {
 		out[i] = agentSpec{
 			Index:   i + 1,
 			Owner:   i / 2,
 			Country: countries[i],
 			Region:  regions[i],
-			ASN:     asns[i],
+			ASN:     64501 + (i % 8),
 			Port:    7443 + i,
 		}
 	}
@@ -91,8 +87,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ownerKeys := make([]string, 8)
-	for o := 0; o < 8; o++ {
+	ownerKeys := make([]string, 12)
+	for o := 0; o < 12; o++ {
 		email := fmt.Sprintf("fleet-provider-%d@example.com", o+1)
 		pass := "provider1"
 		if err := postJSON(api+"/v1/auth/register", map[string]string{"email": email, "password": pass}, nil); err != nil {

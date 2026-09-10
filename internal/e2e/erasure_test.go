@@ -134,6 +134,21 @@ func TestReedSolomonRoundTripSixOfSixteenDown(t *testing.T) {
 		partial[i] = got
 	}
 
+	work := make([][]byte, pipeline.ECTotal)
+	for i, s := range partial {
+		if s != nil {
+			work[i] = append([]byte(nil), s...)
+		}
+	}
+	if err := pipeline.ReconstructShards(work); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < pipeline.ECTotal; i++ {
+		if !bytes.Equal(work[i], shards[i]) {
+			t.Fatalf("rebuilt shard %d mismatch", i)
+		}
+	}
+
 	rebuilt, err := pipeline.ReconstructChunk(partial, len(cipher))
 	if err != nil {
 		t.Fatal(err)

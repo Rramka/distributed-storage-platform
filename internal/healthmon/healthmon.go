@@ -1,5 +1,5 @@
 // Package healthmon accepts node heartbeats over mTLS and records Redis liveness.
-// docs/05-node-agent.md. suspect/offline transitions are M4.
+// docs/05-node-agent.md. online → suspect → offline is published to NATS (M4).
 package healthmon
 
 import (
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/apierr"
+	"github.com/Rramka/distributed-storage-platform/internal/events"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -22,6 +23,7 @@ const liveTTL = 30 * time.Second
 type Server struct {
 	Store *store.Store
 	Redis *redis.Client
+	Bus   *events.Bus
 }
 
 // Mount registers heartbeat on mux (plain or TLS).
@@ -61,10 +63,21 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, apierr.CodeInternal, "internal error", apierr.NewRequestID())
 		return
 	}
-	if err := s.Store.TouchNode(r.Context(), node.ID, req.UsedBytes, node.CapacityBytes); err != nil {
+	from, to, err := s.Store.TouchNodeStatus(r.Context(), node.ID, req.UsedBytes, node.CapacityBytes)
+	if err != nil {
 		slog.Error("healthmon touch", "err", err)
 		apierr.Write(w, apierr.CodeInternal, "internal error", apierr.NewRequestID())
 		return
+	}
+	if from != to && s.Bus != nil {
+		if err := s.Bus.PublishNode(r.Context(), events.NodeEvent{
+			NodeID: node.ID,
+			From:   from,
+			To:     to,
+			At:     time.Now().UTC(),
+		}); err != nil {
+			slog.Error("healthmon publish", "err", err, "node_id", node.ID)
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"messages": []any{}})

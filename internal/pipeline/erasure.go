@@ -80,3 +80,27 @@ func ReconstructChunk(shards [][]byte, chunkSize int) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// ReconstructShards fills nil slots in shards in place. Requires ≥ 10 present.
+func ReconstructShards(shards [][]byte) error {
+	if len(shards) != ECTotal {
+		return ErrShards
+	}
+	present := 0
+	for _, s := range shards {
+		if s != nil {
+			present++
+		}
+	}
+	if present < ECData {
+		return ErrShards
+	}
+	enc, err := reedsolomon.New(ECData, ECParity)
+	if err != nil {
+		return fmt.Errorf("pipeline.reconstructShards: %w", err)
+	}
+	if err := enc.Reconstruct(shards); err != nil {
+		return fmt.Errorf("pipeline.reconstructShards: %w", err)
+	}
+	return nil
+}

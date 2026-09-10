@@ -7,20 +7,20 @@ aliases:
 
 # Repair Service
 
-Keeps redundancy at target levels without humans. Consumes node-failure and audit-failure events from [[NATS JetStream]].
+Keeps redundancy at target levels without humans. Consumes `node.offline` from [[NATS JetStream]] `NODE_EVENTS` and jobs from `REPAIR_JOBS`.
 
-For each affected [[Chunk]], if healthy [[Fragment Placement]] count drops to the repair threshold (**12 of 16**), it:
+For each affected [[Chunk]], if healthy [[Fragment Placement]] count drops below 13 of 16, it:
 
-1. Downloads any 10 surviving fragments (**ciphertext**)
-2. Verifies hashes, Reed–Solomon decodes, re-encodes missing shard indexes
-3. Asks the [[Scheduler]] for fresh nodes
-4. PUTs reconstructed fragments with new [[Placement Ticket]]s
-5. Commits new placements; old ones stay `lost`
+1. Asks [[Metadata Service]] for a repair plan (GET tickets on survivors, PUT tickets on fresh nodes)
+2. Downloads any 10 surviving fragments (**ciphertext**)
+3. Verifies hashes, `ReconstructShards` fills missing indexes, verifies rebuilt hashes against the manifest
+4. PUTs reconstructed fragments with those tickets
+5. Commits receipts to metadata; old placements stay `lost`
 
-**Never decrypts.** Repair workers hold no keys. [[Zero Knowledge]] survives this path.
+The worker **never holds `TICKET_SIGNING_SEED`** and **never decrypts**. [[Zero Knowledge]] survives this path.
 
-Workers are stateless NATS consumers — add workers to add throughput. Throttles: per-source-node bandwidth cap, global repair budget (mass-failure must not stampede the fleet).
+Workers are stateless NATS consumers. Priority is three subjects: `repair.critical` (≤10 healthy), `repair.high` (11), `repair.normal` (12). Throttles: `REPAIR_MAX_CONCURRENT`, `REPAIR_BUDGET_MBPS`.
 
-Priority: ≥ 13 healthy = idle; 12 = normal; ≤ 11 escalates; 10 = urgent; < 10 = durability incident.
+**Flap (interim):** on `node.online`, hash-verified GET of that node's `lost` placements restores them or marks them `expiring` if reconstructed elsewhere. Storage challenges are a follow-up slice.
 
 Full loop: [[Repair Loop]]. Related: [[Erasure Coding]], [[Self-Healing]], [[Horizontal Scalability]]

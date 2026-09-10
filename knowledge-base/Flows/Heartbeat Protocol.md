@@ -14,7 +14,7 @@ Payload: free/used bytes, CPU, memory, fragment count, agent version, disk read 
 
 ## Server-side liveness
 
-Written to [[Redis]] with TTL. 3 misses → [[Node]] `suspect`. 5 minutes silent → `offline` → [[NATS JetStream]] `node.offline` → [[Repair Loop]].
+Written to [[Redis]] with TTL. 3 misses → [[Node]] `suspect`. 5 minutes silent → `offline` → [[NATS JetStream]] `node.offline` → [[Repair Loop]]. Live in M4.
 
 At 10k nodes this is ~1k heartbeats/s — one Health Monitor replica is enough. At 100k+, replicas shard by consistent hash on node ID ([[Horizontal Scalability]]).
 

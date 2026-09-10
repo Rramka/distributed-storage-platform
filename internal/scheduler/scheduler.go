@@ -1,5 +1,5 @@
 // Package scheduler picks online nodes for fragment placements.
-// docs/06-scheduler-and-repair.md — hard constraints in M3; scoring is M4.
+// docs/06-scheduler-and-repair.md — hard constraints live; scoring is a post-exit M4 slice.
 package scheduler
 
 import (
@@ -78,6 +78,18 @@ func (s *Service) Place(ctx context.Context, needs []Need) ([]Assignment, error)
 	}
 
 	usedInChunk := map[uuid.UUID]*chunkUse{}
+	if ids := chunkIDs(needs); s.Store != nil && len(ids) > 0 {
+		occ, err := s.Store.ListOccupants(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for _, o := range occ {
+			if usedInChunk[o.ChunkID] == nil {
+				usedInChunk[o.ChunkID] = newChunkUse()
+			}
+			usedInChunk[o.ChunkID].add(o.Node)
+		}
+	}
 	out := make([]Assignment, 0, len(needs))
 	for _, need := range needs {
 		if usedInChunk[need.ChunkID] == nil {
@@ -95,6 +107,19 @@ func (s *Service) Place(ctx context.Context, needs []Need) ([]Assignment, error)
 		out = append(out, Assignment{FragmentID: need.FragmentID, Node: n})
 	}
 	return out, nil
+}
+
+func chunkIDs(needs []Need) []uuid.UUID {
+	seen := map[uuid.UUID]struct{}{}
+	var ids []uuid.UUID
+	for _, n := range needs {
+		if _, ok := seen[n.ChunkID]; ok {
+			continue
+		}
+		seen[n.ChunkID] = struct{}{}
+		ids = append(ids, n.ChunkID)
+	}
+	return ids
 }
 
 type chunkUse struct {
