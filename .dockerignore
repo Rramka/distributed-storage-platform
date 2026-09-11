@@ -3,7 +3,6 @@
 knowledge-base
 docs
 business
-web
 **/.DS_Store
 .env
 bin
