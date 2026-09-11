@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/google/uuid"
@@ -91,6 +92,67 @@ func TestPickOneNodeDown(t *testing.T) {
 	if got < store.CommitThreshold {
 		t.Fatalf("15 live nodes should still reach commit threshold %d", store.CommitThreshold)
 	}
+}
+
+func TestEligibleProbationQuota(t *testing.T) {
+	t.Parallel()
+	until := time.Now().Add(24 * time.Hour)
+	n := fakeNode(0, 0, "us-east", 64501)
+	n.ProbationUntil = &until
+	n.LivePlacements = ProbationQuota
+	if eligible(n, newChunkUse()) {
+		t.Fatal("probation quota should exclude")
+	}
+	n.LivePlacements = ProbationQuota - 1
+	if !eligible(n, newChunkUse()) {
+		t.Fatal("under quota should be eligible")
+	}
+}
+
+func TestWeightedSamplingPrefersHighReputation(t *testing.T) {
+	t.Parallel()
+	high := fakeNode(0, 0, "us-east", 64501)
+	low := fakeNode(1, 1, "us-west", 64502)
+	high.Reputation = 0.9
+	low.Reputation = 0.2
+	var nh, nl int
+	const rounds = 4000
+	for i := 0; i < rounds; i++ {
+		n, err := pick([]store.Node{high, low}, newChunkUse())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n.ID == high.ID {
+			nh++
+		} else {
+			nl++
+		}
+	}
+	if nh <= nl {
+		t.Fatalf("high reputation sampled %d vs low %d", nh, nl)
+	}
+}
+
+func TestPickNeverBreaksCaps(t *testing.T) {
+	t.Parallel()
+	nodes := satisfiableFleet()
+	for i := range nodes {
+		nodes[i].Reputation = float32(0.2 + 0.05*float64(i%10))
+	}
+	used := newChunkUse()
+	seen := map[uuid.UUID]struct{}{}
+	for i := 0; i < 16; i++ {
+		n, err := pick(nodes, used)
+		if err != nil {
+			t.Fatalf("pick %d: %v", i, err)
+		}
+		if _, ok := seen[n.ID]; ok {
+			t.Fatalf("duplicate node %s", n.ID)
+		}
+		seen[n.ID] = struct{}{}
+		used.add(n)
+	}
+	assertCaps(t, used)
 }
 
 func TestEligibleSkipsFullDisk(t *testing.T) {

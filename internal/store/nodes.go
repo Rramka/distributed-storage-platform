@@ -10,7 +10,8 @@ import (
 const nodeCols = `
 	id, owner_id, cert_fingerprint, public_key, cert_pem, cert_expires_at,
 	hostname_label, os, agent_version, country, region, asn, endpoint,
-	capacity_bytes, used_bytes, status, reputation, registered_at, last_seen_at`
+	capacity_bytes, used_bytes, status, reputation, registered_at, last_seen_at,
+	probation_until, reputation_updated_at`
 
 func scanNode(row interface{ Scan(dest ...any) error }) (Node, error) {
 	var n Node
@@ -19,6 +20,7 @@ func scanNode(row interface{ Scan(dest ...any) error }) (Node, error) {
 		&n.ID, &n.OwnerID, &n.CertFingerprint, &n.PublicKey, &n.CertPEM, &n.CertExpiresAt,
 		&label, &n.OS, &n.AgentVersion, &country, &region, &n.ASN, &n.Endpoint,
 		&n.CapacityBytes, &n.UsedBytes, &n.Status, &n.Reputation, &n.RegisteredAt, &n.LastSeenAt,
+		&n.ProbationUntil, &n.ReputationUpdatedAt,
 	)
 	if label != nil {
 		n.HostnameLabel = *label
@@ -58,8 +60,9 @@ func (s *Store) CreateNode(ctx context.Context, p CreateNodeParams) (Node, error
 	n, err := scanNode(s.pool.QueryRow(ctx, `
 		INSERT INTO nodes (
 			id, owner_id, cert_fingerprint, public_key, cert_pem, cert_expires_at,
-			hostname_label, os, agent_version, country, region, asn, endpoint, capacity_bytes, status
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending')
+			hostname_label, os, agent_version, country, region, asn, endpoint, capacity_bytes, status,
+			probation_until
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending', now() + interval '14 days')
 		RETURNING `+nodeCols, p.ID, p.OwnerID, p.CertFingerprint, p.PublicKey, p.CertPEM, p.CertExpiresAt,
 		nullIfEmpty(p.HostnameLabel), p.OS, p.AgentVersion, nullIfEmpty(p.Country), nullIfEmpty(p.Region), p.ASN, p.Endpoint, p.CapacityBytes,
 	))
@@ -208,4 +211,47 @@ func (s *Store) TransitionStaleNodes(ctx context.Context, suspectAfter, offlineA
 		}
 	}
 	return out, rows.Err()
+}
+
+const (
+	repAlpha = 0.15
+
+	// Signals in [0, 1] for the reputation EWMA (docs/06-scheduler-and-repair.md).
+	SignalChallengePassed  = 0.85
+	SignalChallengeFailed  = 0.0
+	SignalCorruptServed    = 0.0
+	SignalUnplannedOffline = 0.25
+	SignalHonestSelfReport = 0.45
+)
+
+// NextReputation is the EWMA step, clamped to [0, 1].
+func NextReputation(current, signal float32) float32 {
+	v := (1-repAlpha)*current + repAlpha*signal
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+// ApplyReputationEvent writes the EWMA of signal onto nodes.reputation.
+func (s *Store) ApplyReputationEvent(ctx context.Context, id uuid.UUID, signal float32) (from, to float32, err error) {
+	err = s.pool.QueryRow(ctx, `
+		WITH old AS (
+			SELECT reputation FROM nodes WHERE id = $1
+		)
+		UPDATE nodes
+		SET reputation = GREATEST(0::real, LEAST(1::real,
+			(1 - $2::real) * reputation + $2::real * $3::real
+		)),
+		    reputation_updated_at = now()
+		WHERE id = $1
+		RETURNING (SELECT reputation FROM old), reputation
+	`, id, repAlpha, signal).Scan(&from, &to)
+	if err != nil {
+		return 0, 0, mapQueryErr("store.applyReputationEvent", err)
+	}
+	return from, to, nil
 }

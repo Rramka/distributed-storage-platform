@@ -19,6 +19,7 @@ import (
 	"github.com/Rramka/distributed-storage-platform/internal/metadata"
 	"github.com/Rramka/distributed-storage-platform/internal/ratelimit"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
+	"github.com/Rramka/distributed-storage-platform/web/visualizer"
 	"github.com/google/uuid"
 )
 
@@ -71,6 +72,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/upload", s.with(authKeyWrite, s.handlePlanUpload))
 	s.mux.HandleFunc("POST /v1/upload/{id}/commit", s.with(authKeyWrite, s.handleCommitUpload))
 	s.mux.HandleFunc("GET /v1/download/{id}", s.with(authKey, s.handlePlanDownload))
+
+	if os.Getenv("DEMO_MODE") == "1" {
+		s.mux.HandleFunc("GET /v1/demo/fleet", s.handleDemoFleet)
+		s.mux.Handle("GET /demo/", http.StripPrefix("/demo/", visualizer.Handler()))
+		s.mux.HandleFunc("GET /demo", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/demo/", http.StatusFound)
+		})
+	}
 
 	s.mux.HandleFunc("/{path...}", s.handleNotFound)
 }
@@ -506,6 +515,23 @@ func (s *Server) handlePlanDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleDemoFleet(w http.ResponseWriter, r *http.Request) {
+	type fleeter interface {
+		Fleet(ctx context.Context) (metadata.FleetSnapshot, error)
+	}
+	f, ok := s.meta.(fleeter)
+	if !ok {
+		apierr.Write(w, apierr.CodeInternal, "demo fleet unavailable", requestID(r))
+		return
+	}
+	snap, err := f.Fleet(r.Context())
+	if err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
 }
 
 func decodeUploadManifest(r *http.Request) (store.UploadManifest, error) {

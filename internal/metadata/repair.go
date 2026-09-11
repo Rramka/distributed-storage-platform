@@ -54,6 +54,7 @@ type LostRow struct {
 	SizeBytes              int    `json:"size_bytes"`
 	Endpoint               string `json:"endpoint"`
 	Ticket                 string `json:"ticket"`
+	ChallengeTicket        string `json:"challenge_ticket,omitempty"`
 	ReconstructedElsewhere bool   `json:"reconstructed_elsewhere"`
 }
 
@@ -193,6 +194,10 @@ func (s *StoreService) ListLostForNode(ctx context.Context, nodeID uuid.UUID) ([
 		if err != nil {
 			return nil, err
 		}
+		chWire, _, err := s.SignTicket(tickets.OpChallenge, lp.FragmentID, lp.NodeID, lp.SHA256, 64<<10)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, LostRow{
 			PlacementID:            lp.PlacementID,
 			FragmentID:             lp.FragmentID.String(),
@@ -202,6 +207,7 @@ func (s *StoreService) ListLostForNode(ctx context.Context, nodeID uuid.UUID) ([
 			SizeBytes:              lp.SizeBytes,
 			Endpoint:               lp.Endpoint,
 			Ticket:                 wire,
+			ChallengeTicket:        chWire,
 			ReconstructedElsewhere: lp.ReconstructedElsewhere,
 		})
 	}

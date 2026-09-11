@@ -1,5 +1,5 @@
 // Package scheduler picks online nodes for fragment placements.
-// docs/06-scheduler-and-repair.md — hard constraints live; scoring is a post-exit M4 slice.
+// docs/06-scheduler-and-repair.md — hard constraints plus scored weighted sampling.
 package scheduler
 
 import (
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/apierr"
@@ -76,6 +77,39 @@ func (s *Service) Place(ctx context.Context, needs []Need) ([]Assignment, error)
 	if len(live) == 0 {
 		return nil, ErrUnavailable
 	}
+	stats, err := s.Store.LatestNodeStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := s.Store.CountLivePlacementsAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, 0, len(live))
+	for _, n := range live {
+		ids = append(ids, n.ID)
+	}
+	metrics := heartbeatMetrics(ctx, s.Redis, ids)
+	for i := range live {
+		if st, ok := stats[live[i].ID]; ok {
+			live[i].UptimeRatio = st.UptimeRatio
+			if live[i].LatencyMS == 0 {
+				live[i].LatencyMS = st.AvgLatencyMS
+			}
+			if live[i].CPULoad == 0 {
+				live[i].CPULoad = st.CPULoad
+			}
+			if live[i].MemUsedRatio == 0 {
+				live[i].MemUsedRatio = st.MemUsedRatio
+			}
+		}
+		if m, ok := metrics[live[i].ID]; ok {
+			live[i].LatencyMS = m.LatencyMS
+			live[i].CPULoad = m.CPULoad
+			live[i].MemUsedRatio = m.MemUsedRatio
+		}
+		live[i].LivePlacements = counts[live[i].ID]
+	}
 
 	usedInChunk := map[uuid.UUID]*chunkUse{}
 	if ids := chunkIDs(needs); s.Store != nil && len(ids) > 0 {
@@ -100,6 +134,12 @@ func (s *Service) Place(ctx context.Context, needs []Need) ([]Assignment, error)
 			continue
 		}
 		usedInChunk[need.ChunkID].add(n)
+		for i := range live {
+			if live[i].ID == n.ID {
+				live[i].LivePlacements++
+				break
+			}
+		}
 		key := reservePrefix + n.ID.String() + ":" + need.FragmentID.String()
 		if err := s.Redis.Set(ctx, key, need.SizeBytes, s.TTL).Err(); err != nil {
 			return nil, fmt.Errorf("scheduler.place: %w", err)
@@ -151,20 +191,40 @@ func (u *chunkUse) add(n store.Node) {
 
 func pick(nodes []store.Node, used *chunkUse) (store.Node, error) {
 	var cand []store.Node
+	var weights []float64
+	var sum float64
 	for _, n := range nodes {
 		if !eligible(n, used) {
 			continue
 		}
+		w := nodeScore(n)
 		cand = append(cand, n)
+		weights = append(weights, w)
+		sum += w
 	}
 	if len(cand) == 0 {
 		return store.Node{}, ErrUnavailable
 	}
-	i, err := rand.Int(rand.Reader, big.NewInt(int64(len(cand))))
+	if sum <= 0 {
+		sum = float64(len(cand))
+		for i := range weights {
+			weights[i] = 1
+		}
+	}
+	max := big.NewInt(1 << 53)
+	r, err := rand.Int(rand.Reader, max)
 	if err != nil {
 		return store.Node{}, err
 	}
-	return cand[int(i.Int64())], nil
+	x := float64(r.Int64()) / float64(max.Int64()) * sum
+	acc := 0.0
+	for i, w := range weights {
+		acc += w
+		if x <= acc {
+			return cand[i], nil
+		}
+	}
+	return cand[len(cand)-1], nil
 }
 
 func eligible(n store.Node, used *chunkUse) bool {
@@ -183,7 +243,47 @@ func eligible(n store.Node, used *chunkUse) bool {
 	if n.CapacityBytes-n.UsedBytes <= 0 {
 		return false
 	}
+	if inProbation(n) && n.LivePlacements >= ProbationQuota {
+		return false
+	}
 	return true
+}
+
+func inProbation(n store.Node) bool {
+	if n.ProbationUntil != nil && time.Now().Before(*n.ProbationUntil) {
+		return true
+	}
+	return false
+}
+
+func heartbeatMetrics(ctx context.Context, rdb *redis.Client, ids []uuid.UUID) map[uuid.UUID]store.Node {
+	out := map[uuid.UUID]store.Node{}
+	if rdb == nil {
+		return out
+	}
+	for _, id := range ids {
+		m, err := rdb.HGetAll(ctx, "node:metrics:"+id.String()).Result()
+		if err != nil || len(m) == 0 {
+			continue
+		}
+		var n store.Node
+		n.ID = id
+		if v, err := parseFloat(m["cpu_load"]); err == nil {
+			n.CPULoad = float32(v)
+		}
+		if v, err := parseFloat(m["mem_used_ratio"]); err == nil {
+			n.MemUsedRatio = float32(v)
+		}
+		if v, err := parseFloat(m["disk_read_latency_ms"]); err == nil {
+			n.LatencyMS = float32(v)
+		}
+		out[id] = n
+	}
+	return out
+}
+
+func parseFloat(s string) (float64, error) {
+	return strconv.ParseFloat(s, 64)
 }
 
 // Mount registers POST /internal/placements.

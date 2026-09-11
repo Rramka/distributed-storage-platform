@@ -139,6 +139,7 @@ Optional `?version=` (defaults to current). Response: everything the client need
 |---|---|
 | `POST /nodes/registration-codes` | Provider generates a one-time code to bind a new agent install to their account. Body: `{ "endpoint", "country", "region", "asn" }`. Placement attributes are platform-asserted (not agent-reported) and copied onto the node at register. |
 | `GET /nodes` | Provider's nodes: status, capacity, used bytes, reputation, uptime, last seen. |
+| `GET /demo/fleet` | **Demo only** (`DEMO_MODE=1`): fleet-wide nodes + per-chunk healthy counts. Unauthenticated. Not present in a normal deployment. The visualizer at `GET /demo/` polls this. |
 | `GET /nodes/{id}/stats?from=&to=` | Hourly rollups: uptime, audits, bytes served/ingested. |
 | `POST /nodes/{id}/drain` | Graceful retirement — migrate data off, no reputation penalty. |
 | `GET /earnings` | Provider ledger view: accrued credits by node, window, and type. |
@@ -159,8 +160,8 @@ Solo track: HTTP/JSON, not gRPC (gRPC is deferred past M4). Heartbeats are reque
 |---|---|---|
 | `PUT /fragments/{id}` | placement ticket | Ingest fragment; returns signed receipt |
 | `GET /fragments/{id}` | retrieval ticket | Serve fragment; supports `Range` |
-| `DELETE /fragments/{id}` | platform signature | Immediate deletion (also driven via heartbeat stream) |
-| `GET /challenge` | platform signature | Storage-proof response ([07-security.md](07-security.md)) |
+| `DELETE /fragments/{id}` | delete ticket | Immediate deletion (also driven via heartbeat stream) |
+| `GET /challenge` | challenge ticket | Storage-proof response ([07-security.md](07-security.md)). Query `fragment_id`, `offset`, `length`, `nonce`. |
 
 ## Rate limits (MVP defaults)
 

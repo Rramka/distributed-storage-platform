@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	OpPut    = "put"
-	OpGet    = "get"
-	OpDelete = "delete"
+	OpPut       = "put"
+	OpGet       = "get"
+	OpDelete    = "delete"
+	OpChallenge = "challenge"
 
 	NonceSize  = 16
 	SHA256Size = 32
@@ -113,7 +114,7 @@ func NewVerifier(pub ed25519.PublicKey) *Verifier {
 
 // Sign encodes and signs t. Nonce and ExpiresAt are filled if empty.
 func (s *Signer) Sign(t Ticket) (Ticket, error) {
-	if t.Op != OpPut && t.Op != OpGet && t.Op != OpDelete {
+	if t.Op != OpPut && t.Op != OpGet && t.Op != OpDelete && t.Op != OpChallenge {
 		return Ticket{}, ErrOp
 	}
 	if t.FragmentID == uuid.Nil || t.NodeID == uuid.Nil {

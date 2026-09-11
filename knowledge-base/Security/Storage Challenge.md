@@ -20,7 +20,7 @@ Fresh nonce → cannot precompute. Random range → must retain the whole [[Frag
 
 ## MVP verification
 
-Pre-computed challenge sets: at commit, [[CLI and SDK]] (or [[Repair Service]] for reconstructed fragments) computes N future responses and registers them. Platform spends them one at a time. When a set runs low, [[Health Monitor]] fetches the fragment once (ticketed GET, verify hash) and computes a new set — audits stay cheap without storing fragment bytes on the platform.
+Pre-computed challenge sets minted by [[Health Monitor]] (refresh path): ticketed GET, verify hash, store N `(offset, length, nonce, expected)` tuples — never the bytes. Spend one per audit; refill when the set is low. The client does **not** register responses at commit. `GET /challenge` uses a metadata-minted `challenge` ticket ([[Placement Ticket]] family); Metadata is the sole signer.
 
 Failed / slow challenge → [[Fragment Placement]] `lost`, [[Reputation]] damage, [[Repair Loop]]. Honest local-scrub self-report is penalized far less than being caught.
 

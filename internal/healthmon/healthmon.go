@@ -43,12 +43,15 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		NodeID        string `json:"node_id"`
-		FreeBytes     int64  `json:"free_bytes"`
-		UsedBytes     int64  `json:"used_bytes"`
-		CapacityHint  int64  `json:"capacity_bytes"`
-		FragmentCount uint32 `json:"fragment_count"`
-		AgentVersion  string `json:"agent_version"`
+		NodeID            string  `json:"node_id"`
+		FreeBytes         int64   `json:"free_bytes"`
+		UsedBytes         int64   `json:"used_bytes"`
+		CapacityHint      int64   `json:"capacity_bytes"`
+		FragmentCount     uint32  `json:"fragment_count"`
+		AgentVersion      string  `json:"agent_version"`
+		CPULoad           float64 `json:"cpu_load"`
+		MemUsedRatio      float64 `json:"mem_used_ratio"`
+		DiskReadLatencyMS float64 `json:"disk_read_latency_ms"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	if req.NodeID != "" {
@@ -63,6 +66,15 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, apierr.CodeInternal, "internal error", apierr.NewRequestID())
 		return
 	}
+	_ = s.Redis.HSet(r.Context(), "node:metrics:"+node.ID.String(), map[string]any{
+		"free_bytes":           req.FreeBytes,
+		"used_bytes":           req.UsedBytes,
+		"cpu_load":             req.CPULoad,
+		"mem_used_ratio":       req.MemUsedRatio,
+		"disk_read_latency_ms": req.DiskReadLatencyMS,
+		"fragment_count":       req.FragmentCount,
+	}).Err()
+	_ = s.Redis.Expire(r.Context(), "node:metrics:"+node.ID.String(), 2*time.Minute).Err()
 	from, to, err := s.Store.TouchNodeStatus(r.Context(), node.ID, req.UsedBytes, node.CapacityBytes)
 	if err != nil {
 		slog.Error("healthmon touch", "err", err)

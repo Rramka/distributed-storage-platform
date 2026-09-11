@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,8 +40,10 @@ type FragMeta struct {
 
 // ChunkStore is a crash-safe fragment directory plus bbolt index.
 type ChunkStore struct {
-	dir string
-	db  *bbolt.DB
+	dir      string
+	db       *bbolt.DB
+	readMu   sync.Mutex
+	lastRead time.Duration
 }
 
 // OpenStore creates data_dir/fragments and opens meta.db.
@@ -149,6 +152,41 @@ func (s *ChunkStore) Get(id uuid.UUID) (*os.File, FragMeta, error) {
 		return nil, FragMeta{}, fmt.Errorf("agent.get: %w", err)
 	}
 	return f, meta, nil
+}
+
+// MaxChallengeRange is the largest byte range a GET /challenge may request.
+const MaxChallengeRange = 64 << 10
+
+// ReadRange returns a slice of a stored fragment and records read latency.
+func (s *ChunkStore) ReadRange(id uuid.UUID, offset, length int64) ([]byte, error) {
+	if length <= 0 || length > MaxChallengeRange {
+		return nil, ErrTooLarge
+	}
+	start := time.Now()
+	f, meta, err := s.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if offset < 0 || offset > meta.Size || offset+length > meta.Size {
+		return nil, ErrTooLarge
+	}
+	buf := make([]byte, length)
+	if _, err := f.ReadAt(buf, offset); err != nil {
+		return nil, fmt.Errorf("agent.readRange: %w", err)
+	}
+	s.readMu.Lock()
+	s.lastRead = time.Since(start)
+	s.readMu.Unlock()
+	return buf, nil
+}
+
+// LastReadLatencyMS is the most recent fragment-read p95 stand-in (last sample).
+func (s *ChunkStore) LastReadLatencyMS() float64 {
+	s.readMu.Lock()
+	d := s.lastRead
+	s.readMu.Unlock()
+	return float64(d) / float64(time.Millisecond)
 }
 
 // Delete removes a fragment and its index row.

@@ -20,7 +20,7 @@ A provider machine in the registry. Identity **is** its [[mTLS]] client certific
 | `quarantined` | operator or clone-detection |
 | `retired` | done |
 
-Also: country, region, **ASN** (ISP diversity), endpoint, capacity, used bytes, [[Reputation]] (0–1, default 0.5).
+Also: country, region, **ASN** (ISP diversity), endpoint, capacity, used bytes, [[Reputation]] (0–1, default 0.5), `probation_until` (register + 14 days).
 
 Real-time liveness lives in [[Redis]] (TTL), not Postgres. Hourly [[Node Stats]] feed scoring and [[Provider Earnings]].
 

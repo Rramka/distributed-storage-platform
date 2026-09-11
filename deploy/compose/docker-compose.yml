@@ -68,6 +68,7 @@ services:
       HTTP_ADDR: ":8080"
       REDIS_URL: redis://redis:6379
       METADATA_URL: http://metadata:8081
+      DEMO_MODE: "1"
     ports:
       - "8080:8080"
     depends_on:
@@ -155,6 +156,12 @@ services:
       CA_DIR: /ca
       HEALTH_SUSPECT_AFTER: 30s
       HEALTH_OFFLINE_AFTER: 5m
+      METADATA_URL: http://metadata:8081
+      HEALTHMON_ENDPOINT_HOST: host.docker.internal
+      CHALLENGE_INTERVAL: 30s
+      CHALLENGE_TICK: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ca_data:/ca
     ports:

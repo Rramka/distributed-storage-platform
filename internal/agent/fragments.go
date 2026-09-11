@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -19,6 +21,7 @@ func (a *Agent) fragmentMux() *http.ServeMux {
 	mux.HandleFunc("PUT /fragments/{id}", a.handlePut)
 	mux.HandleFunc("GET /fragments/{id}", a.handleGet)
 	mux.HandleFunc("DELETE /fragments/{id}", a.handleDelete)
+	mux.HandleFunc("GET /challenge", a.handleChallenge)
 	return mux
 }
 
@@ -115,6 +118,65 @@ func (a *Agent) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *Agent) handleChallenge(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.URL.Query().Get("fragment_id"))
+	if err != nil {
+		http.Error(w, "invalid fragment id", http.StatusBadRequest)
+		return
+	}
+	offset, err := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
+	if err != nil || offset < 0 {
+		http.Error(w, "invalid offset", http.StatusBadRequest)
+		return
+	}
+	length, err := strconv.ParseInt(r.URL.Query().Get("length"), 10, 64)
+	if err != nil || length <= 0 {
+		http.Error(w, "invalid length", http.StatusBadRequest)
+		return
+	}
+	if length > MaxChallengeRange {
+		http.Error(w, "length exceeds max", http.StatusBadRequest)
+		return
+	}
+	nonce, err := hex.DecodeString(r.URL.Query().Get("nonce"))
+	if err != nil || len(nonce) == 0 {
+		http.Error(w, "invalid nonce", http.StatusBadRequest)
+		return
+	}
+	tk, err := a.tickets.Verify(ticketFrom(r), tickets.OpChallenge, a.id.ID, id)
+	if err != nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if tk.MaxBytes > 0 && uint64(length) > tk.MaxBytes {
+		http.Error(w, "length exceeds max", http.StatusBadRequest)
+		return
+	}
+	if err := a.store.ConsumeNonce(tk.Nonce, tk.ExpiresAt); err != nil {
+		http.Error(w, "replay", http.StatusForbidden)
+		return
+	}
+	rng, err := a.store.ReadRange(id, offset, length)
+	if errors.Is(err, ErrNotStored) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, ErrTooLarge) {
+		http.Error(w, "range", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		http.Error(w, "read failed", http.StatusInternalServerError)
+		return
+	}
+	h := sha256.New()
+	_, _ = h.Write(nonce)
+	_, _ = h.Write(rng)
+	sum := h.Sum(nil)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"sha256": hex.EncodeToString(sum)})
 }
 
 func allZero(b []byte) bool {

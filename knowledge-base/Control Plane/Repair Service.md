@@ -21,6 +21,6 @@ The worker **never holds `TICKET_SIGNING_SEED`** and **never decrypts**. [[Zero 
 
 Workers are stateless NATS consumers. Priority is three subjects: `repair.critical` (≤10 healthy), `repair.high` (11), `repair.normal` (12). Throttles: `REPAIR_MAX_CONCURRENT`, `REPAIR_BUDGET_MBPS`.
 
-**Flap (interim):** on `node.online`, hash-verified GET of that node's `lost` placements restores them or marks them `expiring` if reconstructed elsewhere. Storage challenges are a follow-up slice.
+**Flap:** on `node.online`, a [[Storage Challenge]] (or a hash-GET that seeds a new challenge set) of that node's `lost` placements restores them or marks them `expiring` if reconstructed elsewhere.
 
 Full loop: [[Repair Loop]]. Related: [[Erasure Coding]], [[Self-Healing]], [[Horizontal Scalability]]

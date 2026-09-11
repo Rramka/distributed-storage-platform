@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
-.PHONY: up down ps logs test test-short vet fmt migrate build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4
+.PHONY: up down ps logs test test-short vet fmt migrate build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4 demo invariants
 
 up:
 	$(COMPOSE) up -d --wait postgres
@@ -25,6 +25,12 @@ fleet-kill6:
 
 chaos-m4:
 	go run ./cmd/harness m4
+
+demo:
+	go run ./cmd/harness demo
+
+invariants:
+	go run ./cmd/harness invariants
 
 export-ca:
 	@mkdir -p .local

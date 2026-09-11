@@ -279,6 +279,12 @@ func (c *Client) PlanDownload(ctx context.Context, userID, fileID uuid.UUID) (Do
 	return res, err
 }
 
+func (c *Client) Fleet(ctx context.Context) (FleetSnapshot, error) {
+	var out FleetSnapshot
+	err := c.do(ctx, http.MethodGet, "/internal/demo/fleet", nil, http.StatusOK, &out)
+	return out, err
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body any, want int, dst any) error {
 	var rdr io.Reader
 	if body != nil {

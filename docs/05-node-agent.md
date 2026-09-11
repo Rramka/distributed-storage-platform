@@ -97,8 +97,8 @@ The data-plane surface, served over TLS with per-request ticket authorization ([
 |---|---|---|
 | `PUT /fragments/{id}` | placement ticket | Verify ticket signature and expiry, stream bytes to temp file, verify SHA-256 against ticket, commit, return signed receipt |
 | `GET /fragments/{id}` | retrieval ticket | Verify ticket, stream bytes (range requests supported) |
-| `DELETE /fragments/{id}` | control-plane signature | Delete and confirm; also driven by expiry lists over the heartbeat stream |
-| `GET /challenge` | control-plane signature | Storage-proof response: hash of (nonce ‖ requested byte range) — see below |
+| `DELETE /fragments/{id}` | delete ticket | Delete and confirm; also driven by expiry lists over the heartbeat stream |
+| `GET /challenge` | challenge ticket | Storage-proof response: hash of (nonce ‖ requested byte range) — see below. Query: `fragment_id`, `offset`, `length`, `nonce` (hex). Length is capped so a challenge cannot substitute for a full GET. |
 
 The agent accepts a transfer only with a valid ticket, so it never needs to know who customers are — authorization is delegated entirely to the platform's signature.
 

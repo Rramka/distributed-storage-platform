@@ -18,7 +18,7 @@ Every milestone ends with something that **runs end-to-end**.
 | **M1** Metadata + auth | [[User]], [[Bucket]], [[File]], [[API Key]], [[API Gateway]] (JWT deferred) | Metadata CRUD via CLI — no bytes yet | yes |
 | **M2** Agent + happy path | [[Node Agent]], [[mTLS]], tickets, naive [[Scheduler]], CLI **without** EC | `dsp put && dsp get` through 5 local agents, byte-identical | shipped |
 | **M3** Erasure coding | Full [[Map of Storage Pipeline]], 16-way placement, hard [[Placement Constraints]] | Round-trip with any 6 of 16 agents down; no plaintext on disks | shipped |
-| **M4** Health + repair | [[Health Monitor]] state machine, [[Repair Service]], chaos harness. [[Storage Challenge]] + full scoring follow the exit | Kill 6 of 16; minutes later 16/16 healthy; download works throughout | exit-critical path shipped |
+| **M4** Health + repair | [[Health Monitor]] state machine, [[Repair Service]], chaos harness, [[Storage Challenge]], scored [[Scheduler]] | Kill 6 of 16; minutes later 16/16 healthy; download works throughout | exit + follow-up shipped |
 | **M5** Ledger | Usage stream, double-entry, `R`, [[Quota]] | Accelerated "month" produces balanced books | deferred |
 | **M6** Dashboards + harden | [[Web Dashboard]], [[Admin Dashboard]], installers, chaos pass | Full [[MVP Scope]], demoable by a non-developer | deferred |
 

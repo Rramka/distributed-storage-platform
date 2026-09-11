@@ -123,25 +123,32 @@ type File struct {
 
 // Node is a row in nodes.
 type Node struct {
-	ID              uuid.UUID  `json:"id"`
-	OwnerID         uuid.UUID  `json:"owner_id"`
-	CertFingerprint []byte     `json:"cert_fingerprint"`
-	PublicKey       []byte     `json:"-"`
-	CertPEM         string     `json:"-"`
-	CertExpiresAt   *time.Time `json:"cert_expires_at,omitempty"`
-	HostnameLabel   string     `json:"hostname_label,omitempty"`
-	OS              string     `json:"os"`
-	AgentVersion    string     `json:"agent_version"`
-	Country         string     `json:"country,omitempty"`
-	Region          string     `json:"region,omitempty"`
-	ASN             *int       `json:"asn,omitempty"`
-	Endpoint        string     `json:"endpoint"`
-	CapacityBytes   int64      `json:"capacity_bytes"`
-	UsedBytes       int64      `json:"used_bytes"`
-	Status          string     `json:"status"`
-	Reputation      float32    `json:"reputation"`
-	RegisteredAt    time.Time  `json:"registered_at"`
-	LastSeenAt      *time.Time `json:"last_seen_at,omitempty"`
+	ID                  uuid.UUID  `json:"id"`
+	OwnerID             uuid.UUID  `json:"owner_id"`
+	CertFingerprint     []byte     `json:"cert_fingerprint"`
+	PublicKey           []byte     `json:"-"`
+	CertPEM             string     `json:"-"`
+	CertExpiresAt       *time.Time `json:"cert_expires_at,omitempty"`
+	HostnameLabel       string     `json:"hostname_label,omitempty"`
+	OS                  string     `json:"os"`
+	AgentVersion        string     `json:"agent_version"`
+	Country             string     `json:"country,omitempty"`
+	Region              string     `json:"region,omitempty"`
+	ASN                 *int       `json:"asn,omitempty"`
+	Endpoint            string     `json:"endpoint"`
+	CapacityBytes       int64      `json:"capacity_bytes"`
+	UsedBytes           int64      `json:"used_bytes"`
+	Status              string     `json:"status"`
+	Reputation          float32    `json:"reputation"`
+	RegisteredAt        time.Time  `json:"registered_at"`
+	LastSeenAt          *time.Time `json:"last_seen_at,omitempty"`
+	ProbationUntil      *time.Time `json:"probation_until,omitempty"`
+	ReputationUpdatedAt *time.Time `json:"reputation_updated_at,omitempty"`
+	UptimeRatio         float32    `json:"-"`
+	LatencyMS           float32    `json:"-"`
+	CPULoad             float32    `json:"-"`
+	MemUsedRatio        float32    `json:"-"`
+	LivePlacements      int        `json:"-"`
 }
 
 // RegistrationCode is a row in node_registration_codes (hash stored).

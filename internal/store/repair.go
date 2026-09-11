@@ -76,7 +76,8 @@ func (s *Store) ListOccupants(ctx context.Context, chunkIDs []uuid.UUID) ([]Occu
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT fr.chunk_id, n.id, n.owner_id, n.cert_fingerprint, n.public_key, n.cert_pem, n.cert_expires_at,
 			n.hostname_label, n.os, n.agent_version, n.country, n.region, n.asn, n.endpoint,
-			n.capacity_bytes, n.used_bytes, n.status, n.reputation, n.registered_at, n.last_seen_at
+			n.capacity_bytes, n.used_bytes, n.status, n.reputation, n.registered_at, n.last_seen_at,
+			n.probation_until, n.reputation_updated_at
 		FROM fragment_placements p
 		JOIN fragments fr ON fr.id = p.fragment_id
 		JOIN nodes n ON n.id = p.node_id
@@ -95,6 +96,7 @@ func (s *Store) ListOccupants(ctx context.Context, chunkIDs []uuid.UUID) ([]Occu
 			&o.Node.ID, &o.Node.OwnerID, &o.Node.CertFingerprint, &o.Node.PublicKey, &o.Node.CertPEM, &o.Node.CertExpiresAt,
 			&label, &o.Node.OS, &o.Node.AgentVersion, &country, &region, &o.Node.ASN, &o.Node.Endpoint,
 			&o.Node.CapacityBytes, &o.Node.UsedBytes, &o.Node.Status, &o.Node.Reputation, &o.Node.RegisteredAt, &o.Node.LastSeenAt,
+			&o.Node.ProbationUntil, &o.Node.ReputationUpdatedAt,
 		)
 		if err != nil {
 			return nil, mapQueryErr("store.listOccupants", err)
@@ -309,7 +311,8 @@ func (s *Store) FileHolders(ctx context.Context, fileID uuid.UUID) ([]Node, erro
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT n.id, n.owner_id, n.cert_fingerprint, n.public_key, n.cert_pem, n.cert_expires_at,
 			n.hostname_label, n.os, n.agent_version, n.country, n.region, n.asn, n.endpoint,
-			n.capacity_bytes, n.used_bytes, n.status, n.reputation, n.registered_at, n.last_seen_at
+			n.capacity_bytes, n.used_bytes, n.status, n.reputation, n.registered_at, n.last_seen_at,
+			n.probation_until, n.reputation_updated_at
 		FROM fragment_placements p
 		JOIN fragments fr ON fr.id = p.fragment_id
 		JOIN chunks c ON c.id = fr.chunk_id
@@ -427,6 +430,21 @@ func (s *Store) ChunkCapViolations(ctx context.Context, regionCap, asnCap, owner
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+// AnyCommittedSize returns the logical size of one committed file, if any.
+func (s *Store) AnyCommittedSize(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT v.size_bytes FROM files f
+		JOIN file_versions v ON v.id = f.current_version
+		WHERE v.status = 'committed' AND f.deleted_at IS NULL
+		LIMIT 1
+	`).Scan(&n)
+	if err != nil {
+		return 0, mapQueryErr("store.anyCommittedSize", err)
+	}
+	return n, nil
 }
 
 // AnyCommittedFileID returns one committed file, if any.

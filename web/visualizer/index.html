@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DSP fleet</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0f1419; --fg:#e7ecf3; --muted:#8b98a8; --green:#3dd68c; --amber:#f5c542; --red:#f07178; --card:#1a222c; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:1.25rem 1.5rem 0.5rem; display:flex; justify-content:space-between; align-items:baseline; }
+    h1 { font-size:1.1rem; font-weight:600; margin:0; letter-spacing:.04em; }
+    #repair { color:var(--muted); font-size:.9rem; }
+    #grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:.75rem; padding:1rem 1.5rem; }
+    .node { background:var(--card); border-radius:10px; padding:.75rem; border-left:4px solid var(--muted); }
+    .node.online { border-left-color:var(--green); }
+    .node.suspect { border-left-color:var(--amber); }
+    .node.offline, .node.pending { border-left-color:var(--red); }
+    .node .name { font-weight:600; font-size:.9rem; }
+    .node .meta { color:var(--muted); font-size:.75rem; margin-top:.35rem; line-height:1.4; }
+    #chunks { padding:0 1.5rem 2rem; display:flex; flex-wrap:wrap; gap:.4rem; }
+    .chunk { font-size:.75rem; padding:.2rem .5rem; border-radius:999px; background:var(--card); color:var(--muted); }
+    .chunk.ok { color:var(--green); }
+    .chunk.warn { color:var(--amber); }
+    .chunk.bad { color:var(--red); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Fleet visualizer</h1>
+    <div id="repair">repair in progress: —</div>
+  </header>
+  <div id="grid"></div>
+  <div id="chunks"></div>
+  <script src="app.js"></script>
+</body>
+</html>

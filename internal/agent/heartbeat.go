@@ -51,13 +51,14 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 		free = 0
 	}
 	body, _ := json.Marshal(heartbeatBody{
-		NodeID:        a.id.ID.String(),
-		FreeBytes:     free,
-		UsedBytes:     used,
-		CPULoad:       0,
-		MemUsedRatio:  0,
-		FragmentCount: uint32(n),
-		AgentVersion:  a.cfg.AgentVersion,
+		NodeID:            a.id.ID.String(),
+		FreeBytes:         free,
+		UsedBytes:         used,
+		CPULoad:           cpuLoad(),
+		MemUsedRatio:      memRatio(),
+		FragmentCount:     uint32(n),
+		AgentVersion:      a.cfg.AgentVersion,
+		DiskReadLatencyMS: a.store.LastReadLatencyMS(),
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.healthmon+"/internal/heartbeat", bytes.NewReader(body))
 	if err != nil {
@@ -79,5 +80,24 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 func memRatio() float64 {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	return 0
+	if ms.Sys == 0 {
+		return 0
+	}
+	v := float64(ms.Alloc) / float64(ms.Sys)
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+func cpuLoad() float64 {
+	p := runtime.GOMAXPROCS(0)
+	if p <= 0 {
+		return 0
+	}
+	v := float64(runtime.NumGoroutine()) / float64(p) / 8
+	if v > 1 {
+		return 1
+	}
+	return v
 }

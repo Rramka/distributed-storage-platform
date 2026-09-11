@@ -72,6 +72,19 @@ func main() {
 		OfflineAfter: offline,
 	}
 	go mon.Run(context.Background())
+	if mu := os.Getenv("METADATA_URL"); mu != "" {
+		tick, interval := healthmon.ChallengeDurationsFromEnv()
+		ch := &healthmon.Challenger{
+			Store:    st,
+			Bus:      bus,
+			Meta:     healthmon.NewChallengeMeta(mu),
+			CA:       c.Cert,
+			Tick:     tick,
+			Interval: interval,
+		}
+		go ch.Run(context.Background())
+		go healthmon.RunRollup(context.Background(), st, rdb)
+	}
 	addr := os.Getenv("HEARTBEAT_ADDR")
 	if addr == "" {
 		addr = ":8443"

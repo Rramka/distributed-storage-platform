@@ -51,11 +51,11 @@ For the 16 fragments of any single chunk:
 
 These caps keep the failure-independence assumption behind the durability math ([04-storage-pipeline.md](04-storage-pipeline.md)) honest: a regional power outage, an ISP failure, or one provider rage-quitting can each cost at most 3 fragments of any chunk — well inside the 6-fragment tolerance.
 
-**Solo track M3:** the hard caps are live. Selection is uniform-random over the eligible set. Scoring and weighted sampling remain a post-exit M4 slice. Placement attributes (`country`, `region`, `asn`) are declared by the provider when minting a registration code and copied onto the node at register — the agent cannot self-assert diversity.
+**Solo track:** the hard caps are live. Selection is a **score-proportional weighted sample** over the eligible set (weights below). `bandwidth_factor` is a documented **neutral constant (1.0)** until throughput is measured. Placement attributes (`country`, `region`, `asn`) are declared by the provider when minting a registration code and copied onto the node at register — the agent cannot self-assert diversity. New nodes (`probation_until` = register + 14 days) are capped to a probation placement quota.
 
 ### Selection algorithm
 
-For each chunk: filter by hard constraints → **weighted-random sample** 16 nodes with probability proportional to score (not top-16 — deterministic top-k would funnel all new data onto the same best nodes, creating hotspots and correlated risk) → reserve capacity in Redis and issue placement tickets. Reservations expire with the tickets, so abandoned uploads free capacity automatically. **M3** uses uniform random among nodes that pass the hard caps; the weighted sample is a post-exit M4 slice. When placing repair fragments, existing pending/stored occupants of the chunk are seeded into the cap counters so the 1-per-node rule still holds.
+For each chunk: filter by hard constraints → **weighted-random sample** 16 nodes with probability proportional to score (not top-16 — deterministic top-k would funnel all new data onto the same best nodes, creating hotspots and correlated risk) → reserve capacity in Redis and issue placement tickets. Reservations expire with the tickets, so abandoned uploads free capacity automatically. When placing repair fragments, existing pending/stored occupants of the chunk are seeded into the cap counters so the 1-per-node rule still holds.
 
 Client-supplied region hints (e.g. "prefer EU") bias `latency_factor` without overriding diversity constraints.
 
@@ -120,7 +120,7 @@ sequenceDiagram
 
 Tickets for repair PUTs and GETs are issued by the Metadata Service — the repair worker never holds `TICKET_SIGNING_SEED` ([07-security.md](07-security.md)). The scheduler is still the placement authority; metadata calls it during plan.
 
-**Solo-track M4 slice:** health state machine, NATS events, ciphertext repair, and the chaos harness are the exit-critical path. Storage challenges with pre-computed challenge sets and full scheduler scoring remain a follow-up slice after the kill-6 / heal-to-16/16 test.
+**Solo-track M4 slice:** health state machine, NATS events, ciphertext repair, chaos harness, storage challenges with Health-Monitor-minted challenge sets, and scheduler scoring + weighted sampling are all in tree. Rebalancing remains deferred.
 
 Triggers feeding the loop:
 
@@ -136,7 +136,7 @@ Properties worth noting:
 
 - **Repair never decrypts.** Reed–Solomon reconstruction operates on ciphertext shards; repair workers hold no keys and see no plaintext. The zero-knowledge guarantee survives the repair path.
 - **Idempotent and crash-safe.** A repair job re-checks chunk health before acting (the node may have come back — then the job is dropped and placements restored) and commits placements transactionally. A crashed worker's job simply redelivers via NATS.
-- **Flap handling.** Home machines reboot and resume. `offline` triggers repair evaluation, but fragments on a returning node are re-validated and count as healthy again — repair work in flight for them is cancelled. Only fragments actually reconstructed elsewhere cause the returning node's copies to be expired as surplus. **Interim (until the challenge slice):** re-validation is a hash-verified ticketed GET of each lost placement, not a storage challenge.
+- **Flap handling.** Home machines reboot and resume. `offline` triggers repair evaluation, but fragments on a returning node are re-validated with a storage challenge (or a hash-verified ticketed GET that *seeds* a new challenge set if none remains) and count as healthy again — repair work in flight for them is cancelled. Only fragments actually reconstructed elsewhere cause the returning node's copies to be expired as surplus.
 
 ### Repair throughput and mass failure
 

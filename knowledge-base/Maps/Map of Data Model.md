@@ -49,6 +49,7 @@ erDiagram
 - [[Chunk]] — encrypted 16 MB slice of a version
 - [[Fragment]] — one Reed–Solomon shard (data or parity)
 - [[Fragment Placement]] — which [[Node]] holds which fragment, and in what status
+- `fragment_challenges` — pre-computed storage-proof tuples (offset, nonce, expected hash); never fragment bytes. Minted by [[Health Monitor]].
 
 This last table is the heart of the system and the largest. Indexed **by fragment** (download / repair threshold) and **by node** (failure handling).
 

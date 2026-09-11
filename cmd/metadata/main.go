@@ -71,6 +71,8 @@ func main() {
 	mux := httpserver.NewMux("metadata")
 	metadata.Mount(mux, svc)
 	metadata.MountRepair(mux, svc)
+	metadata.MountChallenges(mux, svc)
+	metadata.MountDemo(mux, svc)
 	if err := httpserver.ListenAndServe("metadata", httpserver.AddrFromEnv(":8081"), mux); err != nil {
 		slog.Error("metadata exited", "err", err)
 		os.Exit(1)

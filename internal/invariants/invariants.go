@@ -37,9 +37,18 @@ func CheckCaps(ctx context.Context, s *store.Store) error {
 }
 
 // CheckAll runs durability and cap checks. Ledger is skipped on the solo track.
+// Zero-knowledge is checked when DSP_ZK_NEEDLE is set (optional DSP_DATA_DIRS).
 func CheckAll(ctx context.Context, s *store.Store) error {
 	if err := CheckDurability(ctx, s); err != nil {
 		return err
 	}
-	return CheckCaps(ctx, s)
+	if err := CheckCaps(ctx, s); err != nil {
+		return err
+	}
+	if needles := needlesFromEnv(); len(needles) > 0 {
+		if err := CheckZeroKnowledge(dataDirsFromEnv(), nil, needles); err != nil {
+			return err
+		}
+	}
+	return nil
 }

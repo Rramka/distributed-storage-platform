@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +19,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: harness kill|drain|flap|status|partition|corrupt|throttle|m4")
+		fmt.Fprintln(os.Stderr, "usage: harness kill|drain|flap|status|partition|corrupt|throttle|m4|demo|invariants")
 		os.Exit(2)
 	}
 	if err := run(os.Args[1], os.Args[2:]); err != nil {
@@ -40,6 +42,10 @@ func run(cmd string, args []string) error {
 		return fmt.Errorf("%s: not implemented (needs challenge/network slice)", cmd)
 	case "m4":
 		return cmdM4(args)
+	case "demo":
+		return cmdDemo(args)
+	case "invariants":
+		return cmdInvariants(args)
 	default:
 		return fmt.Errorf("unknown verb %q", cmd)
 	}
@@ -265,4 +271,124 @@ func agentService(endpoint string) (string, error) {
 		return "", fmt.Errorf("endpoint %s is not a compose agent", endpoint)
 	}
 	return fmt.Sprintf("agent%d", idx), nil
+}
+
+func cmdInvariants(args []string) error {
+	s, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	return invariants.CheckAll(context.Background(), s)
+}
+
+func cmdDemo(args []string) error {
+	started := time.Now().UTC()
+	s, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	ctx := context.Background()
+	size, _ := s.AnyCommittedSize(ctx)
+	nodes, err := s.AnyCommittedHolders(ctx)
+	if err != nil {
+		return err
+	}
+	if len(nodes) < 16 {
+		return fmt.Errorf("need a committed file with 16 holders, have %d (dsp put first)", len(nodes))
+	}
+	killSet := nodes[:6]
+	var names []string
+	for _, n := range killSet {
+		name, err := agentService(n.Endpoint)
+		if err != nil {
+			return err
+		}
+		names = append(names, name)
+	}
+	if err := compose(append([]string{"kill"}, names...)...).Run(); err != nil {
+		return err
+	}
+	downloadOK := false
+	if cmd := os.Getenv("DSP_GET_CMD"); cmd != "" {
+		c := exec.Command("sh", "-c", cmd)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		downloadOK = c.Run() == nil
+	}
+	deadline := time.Now().Add(10 * time.Minute)
+	var final map[uuid.UUID]int
+	for time.Now().Before(deadline) {
+		h, err := s.AnyChunkHealth(ctx)
+		if err != nil {
+			return err
+		}
+		final = h
+		all := len(h) > 0
+		for _, n := range h {
+			if n < 16 {
+				all = false
+				break
+			}
+		}
+		if all {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+	lat := time.Since(started)
+	minH := 16
+	for _, n := range final {
+		if n < minH {
+			minH = n
+		}
+	}
+	dumpOK := true
+	dump, err := compose("exec", "-T", "postgres", "pg_dump", "-U", "dsp", "dsp").Output()
+	needles := [][]byte{[]byte("PLAINTEXT_SECRET_MARKER")}
+	if n := os.Getenv("DSP_ZK_NEEDLE"); n != "" {
+		needles = append(needles, []byte(n))
+	}
+	if err != nil {
+		dumpOK = false
+	} else if err := invariants.CheckZeroKnowledge(nil, [][]byte{dump}, needles); err != nil {
+		dumpOK = false
+	}
+	if err := invariants.CheckAll(ctx, s); err != nil {
+		return err
+	}
+	metrics := map[string]any{
+		"date":                       started.Format("2006-01-02"),
+		"file_bytes":                 size,
+		"killed_nodes":               6,
+		"download_ok_during_failure": downloadOK,
+		"repair_latency_seconds":     int(lat.Seconds()),
+		"final_healthy_per_chunk":    minH,
+		"db_dump_decrypts_nothing":   dumpOK,
+		"visualizer":                 "live",
+	}
+	dir := "business/updates"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "demo-metrics-"+started.Format("2006-01-02")+".json")
+	raw, err := json.MarshalIndent(metrics, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	if !downloadOK {
+		fmt.Println("note: set DSP_GET_CMD to record download_ok_during_failure")
+	}
+	if minH < 16 {
+		return fmt.Errorf("repair did not reach 16/16 (min %d)", minH)
+	}
+	if !dumpOK {
+		return fmt.Errorf("zero-knowledge dump check failed")
+	}
+	return nil
 }

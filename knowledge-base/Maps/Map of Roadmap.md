@@ -23,9 +23,9 @@ Explicitly out: compute, S3 API, real payments, sync clients, provider-set prici
 
 ## Milestones
 
-See [[Milestones]] for M0–M6 (foundations → metadata → happy-path encrypted storage → RS 10+6 → health/repair → ledger → dashboards). **M3 (erasure coding) is shipped.** **M4 exit-critical path (health, NATS, repair, 24-agent fleet, harness) is in the repo.** Challenges and scoring are the remaining M4 slice.
+See [[Milestones]] for M0–M6 (foundations → metadata → happy-path encrypted storage → RS 10+6 → health/repair → ledger → dashboards). **M3 (erasure coding) is shipped.** **M4 (health, NATS, repair, challenges, scored scheduler, 24-agent fleet, harness, W10 visualizer) is in the repo.**
 
-M4 ([[Repair Loop]] first; [[Storage Challenge]] + full [[Scheduler]] scoring next) is the platform's core claim.
+W10: fleet visualizer at gateway `GET /demo/` (`DEMO_MODE=1`) polling `GET /v1/demo/fleet`. Scripted capture: `make demo`.
 
 ## After MVP
 

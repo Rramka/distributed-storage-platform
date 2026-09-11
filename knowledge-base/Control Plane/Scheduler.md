@@ -29,7 +29,9 @@ score = 0.20·capacity_headroom + 0.30·uptime_30d + 0.30·reputation
 
 **M2 (solo track, superseded by M3):** naive placement — filter `online` + Redis live key + free space, **one fragment per node per chunk**, uniform random sample.
 
-**M3:** hard caps from [[Placement Constraints]] — one fragment per node; region / ASN caps of 3; owner cap of 2; `online` + free-space floor. Uniform random over the eligible set. Scoring and weighted sampling stay a post-exit M4 slice. Repair placement seeds existing pending/stored occupants into the cap counters. `country` / `region` / `asn` are declared on the registration code, not by the agent.
+**M3:** hard caps from [[Placement Constraints]] — one fragment per node; region / ASN caps of 3; owner cap of 2; `online` + free-space floor. Repair placement seeds existing pending/stored occupants into the cap counters. `country` / `region` / `asn` are declared on the registration code, not by the agent.
+
+**M4 follow-up:** score-proportional weighted sampling with the weights above. `bandwidth_factor` is a neutral constant (1.0) until throughput is measured. New nodes have `probation_until` = register + 14 days and a placement quota.
 
 Capacity is reserved in Redis until the [[Placement Ticket]] expires, so abandoned uploads free space automatically.
 

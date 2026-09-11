@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/events"
+	"github.com/Rramka/distributed-storage-platform/internal/healthmon"
 	"github.com/Rramka/distributed-storage-platform/internal/metadata"
 	"github.com/Rramka/distributed-storage-platform/internal/pipeline"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
@@ -114,18 +115,18 @@ func (w *Worker) onNodeOnline(ctx context.Context, _ string, data []byte) error 
 	if err := json.Unmarshal(data, &ev); err != nil {
 		return err
 	}
-	// Interim flap re-validation: hash-verified GET stands in for challenges.
+	// Flap re-validation uses a storage challenge when a set exists; otherwise
+	// a hash-verified GET seeds a new set (docs/07-security.md refresh path).
 	rows, err := w.Meta.Lost(ctx, ev.NodeID)
 	if err != nil {
 		return err
 	}
 	var restore, expire []int64
 	for _, row := range rows {
-		body, err := getFragment(ctx, w.CA, row.Endpoint, ev.NodeID.String(), row.FragmentID, row.Ticket)
-		if err != nil || !hashMatches(body, row.SHA256) {
+		ok, err := w.revalidate(ctx, ev.NodeID, row)
+		if err != nil || !ok {
 			continue
 		}
-		w.account(len(body))
 		if row.ReconstructedElsewhere {
 			expire = append(expire, row.PlacementID)
 			continue
@@ -136,6 +137,40 @@ func (w *Worker) onNodeOnline(ctx context.Context, _ string, data []byte) error 
 		return nil
 	}
 	return w.Meta.Flap(ctx, ev.NodeID, restore, expire)
+}
+
+func (w *Worker) revalidate(ctx context.Context, nodeID uuid.UUID, row metadata.LostRow) (bool, error) {
+	fid, err := uuid.Parse(row.FragmentID)
+	if err != nil {
+		return false, err
+	}
+	ch, err := w.Store.TakeNextUnspent(ctx, fid, nodeID)
+	if err == nil && row.ChallengeTicket != "" {
+		got, err := getChallenge(ctx, w.CA, row.Endpoint, nodeID.String(), row.FragmentID, row.ChallengeTicket, ch.Offset, ch.Length, ch.Nonce)
+		_ = w.Store.MarkChallengeSpent(ctx, fid, nodeID, ch.Seq)
+		if err != nil {
+			return false, nil
+		}
+		if len(got) != len(ch.Expected) {
+			return false, nil
+		}
+		ok := true
+		for i := range got {
+			if got[i] != ch.Expected[i] {
+				ok = false
+				break
+			}
+		}
+		return ok, nil
+	}
+	body, err := getFragment(ctx, w.CA, row.Endpoint, nodeID.String(), row.FragmentID, row.Ticket)
+	if err != nil || !hashMatches(body, row.SHA256) {
+		return false, nil
+	}
+	w.account(len(body))
+	set := healthmon.ComputeChallengeSet(body, fid, nodeID, 8, 4096)
+	_ = w.Store.InsertChallengeSet(ctx, set)
+	return true, nil
 }
 
 func (w *Worker) drainJobs(ctx context.Context) error {

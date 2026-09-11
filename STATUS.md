@@ -1,49 +1,45 @@
 # Status
 
-Last updated: 2026-09-10 (M4 exit-critical path: health, NATS, repair, 24-agent fleet)
+Last updated: 2026-09-11 (M4 follow-up + W10: challenges, scoring, visualizer, demo capture)
 
 ## Current milestone
 
-**M4 — Health, repair, self-healing** (solo builder track) — **exit-critical path shipped**
+**M4 follow-up + W10** (solo builder track) — **shipped**
 
-Exit criteria: kill 6 of 16 agents holding a file; every chunk returns to 16/16 stored placements; `dsp get` succeeds throughout. Storage challenges and scheduler scoring are a follow-up slice.
+Exit-critical M4 (kill 6 of 16 → 16/16) was already in tree. This session added storage challenges, scheduler scoring, the fleet visualizer, and `make demo`.
 
 ## Shipped last session
 
-- Health Monitor `online → suspect (30s) → offline (5m)` with NATS `NODE_EVENTS`
-- Repair Service: mark lost, priority jobs on `REPAIR_JOBS`, ciphertext `ReconstructShards`, metadata-issued tickets only
-- Flap path: hash-verified GET re-validates returning nodes (interim stand-in for challenges)
-- Compose fleet `agent1..agent24` (12 owners × 2, 8 regions, 8 ASNs)
-- `cmd/harness` + `make fleet-kill6` / `make chaos-m4`
-- `internal/invariants` for ≥12 healthy placements and placement caps
-- Compose repair dials agents via `REPAIR_ENDPOINT_HOST=host.docker.internal` (nodes advertise `127.0.0.1`)
+- Storage challenges: `fragment_challenges` table; Health Monitor mints sets via ticketed GET (never stores bytes); `GET /challenge` on the agent with metadata-issued `challenge` tickets; failed audit marks one placement lost and enqueues repair
+- Flap re-validation uses a challenge (GET only to seed a new set)
+- Scheduler scoring + weighted sampling (spec weights); reputation EWMA; 14-day probation quota; heartbeat metrics in Redis `node:metrics:{id}` + hourly `node_stats`
+- Fleet visualizer at gateway `GET /demo/` when `DEMO_MODE=1`, polling `GET /v1/demo/fleet`
+- `make demo` / `harness demo` writes `business/updates/demo-metrics-YYYY-MM-DD.json`; `make invariants`; zero-knowledge scan in `internal/invariants`
 
 ## Chaos report
 
-- Scenario: M4 kill-6-of-16
-- Started: 2026-09-10T11:53:38Z
-- Kill set: agent23, agent13, agent14, agent9, agent19, agent15
-- Download during failure: pass (byte-identical)
-- Repair latency: ~5 min heartbeat grace to `offline`, then reconstruction completed in seconds once the worker could reach host-published agent ports
-- Final healthy placements: 16/16 stored (6 lost on killed nodes)
-- Invariants: ≥12 healthy pass; caps pass on 16-way chunks; ledger skipped
+Unchanged from 2026-09-10 kill-6-of-16 (see previous STATUS). Re-record with `make demo` after `make up` + `dsp put`.
 
 ## Blocked
 
-- Nothing on the exit-critical path. Challenges and scoring not started.
+- Nothing on the solo track through W10. Ledger / dashboards / JWT / S3 remain deferred.
 
 ## Next three tasks
 
-1. M4 follow-up: storage challenges with pre-computed challenge sets
-2. M4 follow-up: scheduler scoring + weighted sampling + reputation EWMA / probation
-3. W10: fleet visualizer + scripted demo capture
+1. W11: soak run, security review, red-team DB-dump fixture in CI, invariant job
+2. W12: demo video, deck, data room, landing page with waitlist
+3. After the raise demo: M5 ledger (only then)
 
 ## Notes for the next session
 
 Run the `session-brief` skill first. Do not start ledger, dashboards, JWT, or S3.
 
-Compose is `deploy/compose/docker-compose.yml`. After `make up`, `make export-ca` (`DSP_CA_FILE=.local/ca.crt`). Host Postgres is on **5433**. Repair never receives `TICKET_SIGNING_SEED`.
+Compose is `deploy/compose/docker-compose.yml`. After `make up`, `make export-ca` (`DSP_CA_FILE=.local/ca.crt`). Host Postgres is on **5433**. Repair and Health Monitor never receive `TICKET_SIGNING_SEED`. Gateway `DEMO_MODE=1` serves `/demo/`. Health Monitor uses `HEALTHMON_ENDPOINT_HOST=host.docker.internal` and `CHALLENGE_INTERVAL=30s` in Compose.
 
-If `fleet-seed` fails on an old volume: `make fleet-down && make up`.
+Visualizer: http://127.0.0.1:8080/demo/
 
-Vault: `knowledge-base/Control Plane/Health Monitor.md`, `Repair Service.md`, `Scheduler.md`, `Flows/Repair Loop.md`, `Flows/Heartbeat Protocol.md`, `Technology/NATS JetStream.md`, `Roadmap/Milestones.md`, `Maps/Map of Roadmap.md`, `Home.md`.
+`make demo` records honest `download_ok_during_failure` only if `DSP_GET_CMD` is set.
+
+If `fleet-seed` fails on an old volume: `make fleet-down && make up` (needed once for migrations `000007` / `000008`).
+
+Vault: `knowledge-base/Control Plane/Health Monitor.md`, `Repair Service.md`, `Scheduler.md`, `API Gateway.md`, `Flows/Repair Loop.md`, `Security/Storage Challenge.md`, `Roadmap/Milestones.md`, `Maps/Map of Roadmap.md`, `Maps/Map of Data Model.md`, `Home.md`.

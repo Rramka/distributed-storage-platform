@@ -17,7 +17,7 @@ State machine (M4): `online` → 3 missed beats (30s) → `suspect` (no new plac
 
 ## Audits
 
-Issues random [[Storage Challenge]]s. Failures mark [[Fragment Placement]] `lost` and damage [[Reputation]].
+Issues random [[Storage Challenge]]s. The Health Monitor mints pre-computed challenge sets via a ticketed GET (never stores fragment bytes), spends one tuple per audit, and on failure marks [[Fragment Placement]] `lost` and damages [[Reputation]]. Heartbeat CPU/mem/latency land in Redis `node:metrics:<id>`; hourly [[Node Stats]] rollups feed the [[Scheduler]].
 
 ## Control channel to the agent
 

@@ -139,6 +139,24 @@ func TestParseSeed(t *testing.T) {
 	}
 }
 
+func TestSignChallengeOp(t *testing.T) {
+	t.Parallel()
+	s := testSigner(t)
+	v := NewVerifier(s.PublicKey())
+	tk := validTicket()
+	tk.Op = OpChallenge
+	got, err := s.Sign(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.Verify(got.Raw, OpChallenge, tk.NodeID, tk.FragmentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.Verify(got.Raw, OpGet, tk.NodeID, tk.FragmentID); err != ErrOp {
+		t.Fatalf("wrong op: %v", err)
+	}
+}
+
 func TestNewSignerRejectsBadSeed(t *testing.T) {
 	t.Parallel()
 	if _, err := NewSignerFromSeed([]byte("short")); err != ErrSeed {

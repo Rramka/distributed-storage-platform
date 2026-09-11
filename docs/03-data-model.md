@@ -135,6 +135,18 @@ CREATE TABLE fragment_placements (
 
 CREATE INDEX placements_by_node ON fragment_placements (node_id, status);
 CREATE INDEX placements_by_fragment ON fragment_placements (fragment_id, status);
+
+CREATE TABLE fragment_challenges (
+    fragment_id     UUID NOT NULL REFERENCES fragments(id),
+    node_id         UUID NOT NULL REFERENCES nodes(id),
+    seq             INTEGER NOT NULL,
+    offset_bytes    INTEGER NOT NULL,
+    length_bytes    INTEGER NOT NULL,
+    nonce           BYTEA NOT NULL,
+    expected        BYTEA NOT NULL,             -- SHA-256(nonce || bytes[range]); never the bytes
+    spent_at        TIMESTAMPTZ,
+    PRIMARY KEY (fragment_id, node_id, seq)
+);
 ```
 
 `fragment_placements` is the heart of the system and its largest table. Both access patterns are indexed:
@@ -165,6 +177,8 @@ CREATE TABLE nodes (
     reputation      REAL NOT NULL DEFAULT 0.5,  -- 0..1, see 06-scheduler-and-repair.md
     registered_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at    TIMESTAMPTZ,
+    probation_until TIMESTAMPTZ,                -- register + 14 days; limited placement quota
+    reputation_updated_at TIMESTAMPTZ,
     public_key      BYTEA NOT NULL,             -- Ed25519 public key; receipts verified against this
     cert_pem        TEXT NOT NULL,              -- issued leaf (PEM)
     cert_expires_at TIMESTAMPTZ
