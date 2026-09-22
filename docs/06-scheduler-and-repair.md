@@ -85,7 +85,8 @@ flowchart LR
     h10 -->|catastrophic simultaneous loss| lost["below 10 - chunk unreadable"]
 ```
 
-- **≥ 13 healthy:** no action.
+- **16 healthy:** ideal, no action.
+- **13–15 healthy:** normal-priority backfill to 16 (commit leftovers, or a loss that did not reach 12).
 - **12 healthy (repair threshold):** normal-priority reconstruction. The 2-fragment buffer above the theoretical minimum-plus-safety exists so repair happens *calmly*, on schedule, not in a panic.
 - **≤ 11 healthy:** priority escalates with each further loss; at 10 the chunk is one failure from unreadable and repairs preempt everything.
 - **< 10 healthy:** data loss — the event the entire design exists to make (nearly) impossible. Raises an operator alert and a durability incident.
@@ -105,7 +106,7 @@ sequenceDiagram
     HM->>Q: node.offline
     Q->>RW: node.offline
     RW->>RW: Mark placements lost, group by chunk
-    RW->>RW: Skip chunks still >= 13 healthy
+    RW->>RW: Skip chunks still >= 16 healthy
     RW->>Q: Enqueue repair jobs (priority by health count)
     Q->>RW: repair job (chunk_id)
     RW->>MD: POST /internal/repair/chunks/{id}/plan

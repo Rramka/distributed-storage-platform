@@ -1,46 +1,47 @@
 # Status
 
-Last updated: 2026-09-21 (W11: soak, security review, red-team CI, invariant job)
+Last updated: 2026-09-22 (W12: demo capture, deck + data room, landing page)
 
 ## Current milestone
 
-**W11** (solo builder track) — **shipped**
+**W12** (solo builder track) — **shipped** (harness + artifacts; screen recording is a human step)
 
-Soak, hermetic invariant + red-team CI, nightly Compose fleet job, `harness corrupt`, and a security review of the crypto surface. M4 exit (kill 6 of 16 → 16/16) was already in tree.
+Demo metrics, sourced market notes, deck outline, data-room index, and a static waitlist page. M0–M4 remain the investable artifact.
 
 ## Shipped this session
 
-- `harness corrupt <agent> [--frac]`: flips one byte per 4 KiB block in on-disk `.frag` files (bbolt hash left intact) so the next storage challenge is a hit
-- Hermetic `TestCorruptFragmentDetectedAndRepaired`: challenge mismatch + RS reconstruct still byte-identical
-- `harness soak --duration --seed` / `make soak`: randomized kill/flap/corrupt, max 6 down, floor 10 healthy, JSON + chaos report. Throttles to flap-only while any tracked chunk is below 13
-- `scripts/apply-migrations.sh` + `make migrate-url`; `DSP_REQUIRE_PG=1` makes missing Postgres fail instead of skip
-- Fixture seeder `store.SeedCommittedFleet` and table-driven durability/cap tests (11 healthy, duplicate node, owner cap)
-- Red-team `pg_dump` fixture with planted-needle positive control
-- CI `invariants` job (Postgres 16 + Redis 7 service containers) and `.github/workflows/nightly.yml` (Compose fleet + `chaos-m4`)
-- Security review: `business/updates/security-review-2026-09-20.md` — no medium+ findings
+- Clean Compose fleet (`make fleet-down && make up`); 31 MiB `Vacation.mp4` (two ciphertext chunks; 32 MiB plaintext overflows to a third chunk and exhausts the 24×2 probation quota)
+- `make invariants` clean on that file before the take
+- `harness demo`: clock starts after kill; waits for health to dip then return to 16/16; `pg_dump` no longer fails because stdout was already attached
+- Kill set is nodes that hold **every** chunk, so each chunk drops below the repair threshold
+- Repair backfill to 16/16: skip failed PUTs, mark those pendings lost, queue 13–15 at normal priority (docs/06 updated)
+- `LatestNodeStats` coalesces NULL audit-only rollup columns (Place was 500 after the first challenge bump)
+- `business/updates/demo-metrics-2026-09-22.json`: download during failure **true**, **16/16**, dump **true**, **296s** from kill (includes 5 min offline grace)
+- Market research, deck outline, data room, investor note, `web/landing/` Formspree waitlist (no gateway route, no table)
 
 ## Chaos / soak report
 
-2h soak (`seed=21`) on 2026-09-21: 34 rounds, 34 flap / 0 kill / 0 corrupt (kill withheld while min healthy was already ≤12). **Min healthy observed: 10/16** (floor held). Repair did not return to 16/16: three committed chunks already violate placement caps, so the scheduler cannot place replacements. Pre-existing: `invariants.caps` on chunk `0e56dba8-8334-4a20-a0d1-f1d7c5e74470`. Metrics: `business/updates/soak-2026-09-21.json`.
+W12 demo (2026-09-22): kill 6 every-chunk holders, `dsp get` byte-identical while down, heal to 16/16 in 296s. Visualizer live at `/demo/`.
 
-`partition` and `throttle` remain unimplemented.
+W11 soak unchanged: 2h seed=21, min healthy 10/16. `partition` and `throttle` remain unimplemented.
 
 ## Blocked
 
-- Live Compose volume has placement-cap violations from earlier repair/test fixtures. A clean `make fleet-down && make up` + `dsp put` would let soak exercise kill/corrupt again. Ledger / dashboards / JWT / S3 remain deferred.
+- Screen recording still needs a human with `demo-script-w12.md`. Formspree `YOUR_FORM_ID` must be replaced before the landing page is public.
+- Ledger / dashboards / JWT / S3 remain deferred.
 
 ## Next three tasks
 
-1. W12: demo video (`make demo` after a clean fleet + `dsp put`)
-2. W12: deck + data room (research stubs in `business/` still need the `market-research` skill)
-3. W12: landing page with waitlist
+1. Record the W12 screen capture (visualizer + terminal) from `demo-script-w12.md`
+2. Replace Formspree ID and publish `web/landing/`
+3. Send `business/updates/2026-09-22.md` + the clip (or `deck/outline.md` if the clip slips)
 
 ## Notes for the next session
 
 Run the `session-brief` skill first. Do not start ledger, dashboards, JWT, or S3.
 
-Compose is `deploy/compose/docker-compose.yml`. After `make up`, `make export-ca` (`DSP_CA_FILE=.local/ca.crt`). Host Postgres is on **5433**. `make soak DURATION=2h`. `make invariants`. Gateway `DEMO_MODE=1` serves `/demo/`.
+Compose is `deploy/compose/docker-compose.yml`. After `make up`, `make export-ca` (`DSP_CA_FILE=.local/ca.crt`). Host Postgres is on **5433**. Gateway `DEMO_MODE=1` serves `/demo/`. Landing page is **not** on the gateway.
 
-If `fleet-seed` fails on an old volume: `make fleet-down && make up`.
+If `fleet-seed` fails on an old volume: `make fleet-down && make up`. 32 MiB plaintext → 3 chunks; use 31 MiB for a 16/16 start on a probation fleet.
 
-Vault: `knowledge-base/Control Plane/Health Monitor.md`, `Flows/Repair Loop.md`, `Security/Storage Challenge.md`, `Roadmap/Milestones.md`, `Maps/Map of Roadmap.md`, `Home.md`.
+Vault: `knowledge-base/Roadmap/Milestones.md`, `Maps/Map of Roadmap.md`, `Home.md`, `Flows/Repair Loop.md`, `Control Plane/Repair Service.md`, `Security/Self-Healing.md`.

@@ -145,10 +145,11 @@ func nodeSubject(status string) (string, bool) {
 }
 
 // PrioritySubject returns the repair job subject for a healthy-placement count.
-// Empty means no job (≥ 13 healthy).
+// Empty means no job (16/16). 13–15 backfill at normal priority so commit
+// leftovers and single-node loss still heal to the M4 16/16 target.
 func PrioritySubject(healthy int) string {
 	switch {
-	case healthy >= 13:
+	case healthy >= 16:
 		return ""
 	case healthy <= 10:
 		return SubjRepairCritical

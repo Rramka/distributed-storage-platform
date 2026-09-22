@@ -354,6 +354,43 @@ func TestTransitionStaleNodes(t *testing.T) {
 	}
 }
 
+func TestLatestNodeStatsAfterAuditBump(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "stats-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.CreateNode(ctx, CreateNodeParams{
+		OwnerID:         u.ID,
+		CertFingerprint: []byte(uuid.NewString()),
+		PublicKey:       bytes32(11),
+		CertPEM:         "pem",
+		CertExpiresAt:   time.Now().Add(time.Hour),
+		OS:              "linux",
+		AgentVersion:    "test",
+		Endpoint:        "127.0.0.1:9",
+		CapacityBytes:   1 << 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BumpNodeAudit(ctx, n.ID, true); err != nil {
+		t.Fatalf("BumpNodeAudit: %v", err)
+	}
+	got, err := s.LatestNodeStats(ctx)
+	if err != nil {
+		t.Fatalf("LatestNodeStats after audit-only row: %v", err)
+	}
+	st, ok := got[n.ID]
+	if !ok {
+		t.Fatal("missing stats for audited node")
+	}
+	if st.AuditsPassed != 1 {
+		t.Fatalf("audits_passed %d", st.AuditsPassed)
+	}
+}
+
 func bytes32(seed byte) []byte {
 	b := make([]byte, 32)
 	for i := range b {

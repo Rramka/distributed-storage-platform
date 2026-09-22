@@ -1,6 +1,6 @@
 # Deck
 
-Pitch outline for the week-12 raise. Slides come later; this folder holds source notes only.
+Pitch outline for the week-12 raise. Slides come later; this folder holds source notes only. Slide-by-slide copy: [`outline.md`](outline.md).
 
 ## Arc
 

@@ -114,10 +114,18 @@ func parseFileFlag(args []string) (uuid.UUID, int, []string) {
 }
 
 func holders(ctx context.Context, s *store.Store, fileID uuid.UUID) ([]store.Node, error) {
-	if fileID != uuid.Nil {
-		return s.FileHolders(ctx, fileID)
+	if fileID == uuid.Nil {
+		id, err := s.AnyCommittedFileID(ctx)
+		if err != nil {
+			return nil, err
+		}
+		fileID = id
 	}
-	return s.AnyCommittedHolders(ctx)
+	core, err := s.FileHoldersEveryChunk(ctx, fileID)
+	if err != nil {
+		return nil, err
+	}
+	return core, nil
 }
 
 func cmdKill(args []string) error {
@@ -211,12 +219,12 @@ func cmdM4(args []string) error {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	nodes, err := s.AnyCommittedHolders(ctx)
+	nodes, err := holders(ctx, s, uuid.Nil)
 	if err != nil {
 		return err
 	}
-	if len(nodes) < 16 {
-		return fmt.Errorf("need a committed file with 16 holders, have %d (dsp put first)", len(nodes))
+	if len(nodes) < 6 {
+		return fmt.Errorf("need 6 nodes that hold every chunk, have %d (dsp put first)", len(nodes))
 	}
 	killSet := nodes[:6]
 	var names []string
@@ -306,12 +314,12 @@ func cmdDemo(args []string) error {
 	defer s.Close()
 	ctx := context.Background()
 	size, _ := s.AnyCommittedSize(ctx)
-	nodes, err := s.AnyCommittedHolders(ctx)
+	nodes, err := holders(ctx, s, uuid.Nil)
 	if err != nil {
 		return err
 	}
-	if len(nodes) < 16 {
-		return fmt.Errorf("need a committed file with 16 holders, have %d (dsp put first)", len(nodes))
+	if len(nodes) < 6 {
+		return fmt.Errorf("need 6 nodes that hold every chunk, have %d (dsp put first)", len(nodes))
 	}
 	killSet := nodes[:6]
 	var names []string
@@ -325,6 +333,7 @@ func cmdDemo(args []string) error {
 	if err := compose(append([]string{"kill"}, names...)...).Run(); err != nil {
 		return err
 	}
+	repairStarted := time.Now()
 	downloadOK := false
 	if cmd := os.Getenv("DSP_GET_CMD"); cmd != "" {
 		c := exec.Command("sh", "-c", cmd)
@@ -332,27 +341,37 @@ func cmdDemo(args []string) error {
 		c.Stderr = os.Stderr
 		downloadOK = c.Run() == nil
 	}
-	deadline := time.Now().Add(10 * time.Minute)
+	deadline := time.Now().Add(15 * time.Minute)
 	var final map[uuid.UUID]int
+	seenDip := false
 	for time.Now().Before(deadline) {
 		h, err := s.AnyChunkHealth(ctx)
 		if err != nil {
 			return err
 		}
 		final = h
-		all := len(h) > 0
+		minNow := 16
 		for _, n := range h {
-			if n < 16 {
-				all = false
-				break
+			if n < minNow {
+				minNow = n
 			}
 		}
-		if all {
+		if !seenDip {
+			if len(h) > 0 && minNow < 16 {
+				seenDip = true
+			}
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		if len(h) > 0 && minNow >= 16 {
 			break
 		}
 		time.Sleep(5 * time.Second)
 	}
-	lat := time.Since(started)
+	if !seenDip {
+		return fmt.Errorf("kill did not drop healthy placements below 16/16 within 15m")
+	}
+	lat := time.Since(repairStarted)
 	minH := 16
 	for _, n := range final {
 		if n < minH {
@@ -360,7 +379,7 @@ func cmdDemo(args []string) error {
 		}
 	}
 	dumpOK := true
-	dump, err := compose("exec", "-T", "postgres", "pg_dump", "-U", "dsp", "dsp").Output()
+	dump, err := composeCmd("exec", "-T", "postgres", "pg_dump", "-U", "dsp", "dsp").Output()
 	needles := [][]byte{[]byte("PLAINTEXT_SECRET_MARKER")}
 	if n := os.Getenv("DSP_ZK_NEEDLE"); n != "" {
 		needles = append(needles, []byte(n))

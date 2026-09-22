@@ -29,6 +29,8 @@ W10: fleet visualizer at gateway `GET /demo/` (`DEMO_MODE=1`) polling `GET /v1/d
 
 W11: soak (`make soak` / `harness soak`), hermetic invariant + red-team CI job, nightly Compose fleet job. `harness corrupt` is implemented; `partition` and `throttle` are not. Solo soak is hours over tens of files, not days over thousands.
 
+W12: `make demo` writes `business/updates/demo-metrics-YYYY-MM-DD.json`. Static waitlist at `web/landing/` (Formspree; not served by the gateway). Screen recording is a human step.
+
 ## After MVP
 
 [[Long-term Vision]]: S3 + payments → file sync / block storage → containers / serverless → GPU / VMs / K8s. Each phase reuses the storage network, [[Reputation]], and ledger rails.

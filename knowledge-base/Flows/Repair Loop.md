@@ -22,7 +22,7 @@ sequenceDiagram
 
     HM->>Q: node.offline
     Q->>RW: node.offline
-    RW->>RW: mark lost, skip chunks still >= 13 healthy
+    RW->>RW: mark lost, skip chunks still >= 16 healthy
     RW->>MD: plan (tickets)
     MD->>SC: Place missing fragments
     RW->>SN: GET any 10 ciphertext fragments

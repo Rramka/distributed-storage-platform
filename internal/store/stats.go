@@ -68,8 +68,10 @@ func (s *Store) BumpNodeAudit(ctx context.Context, nodeID uuid.UUID, passed bool
 func (s *Store) LatestNodeStats(ctx context.Context) (map[uuid.UUID]NodeStats, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT ON (node_id)
-			node_id, window_start, uptime_ratio, avg_latency_ms, free_bytes,
-			cpu_load, mem_used_ratio, audits_passed, audits_failed, bytes_served, bytes_ingested
+			node_id, window_start, uptime_ratio,
+			COALESCE(avg_latency_ms, 0), COALESCE(free_bytes, 0),
+			COALESCE(cpu_load, 0), COALESCE(mem_used_ratio, 0),
+			audits_passed, audits_failed, bytes_served, bytes_ingested
 		FROM node_stats
 		ORDER BY node_id, window_start DESC
 	`)

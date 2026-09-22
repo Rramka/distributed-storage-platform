@@ -95,7 +95,8 @@ func (s *StoreService) PlanRepair(ctx context.Context, chunkID uuid.UUID) (Repai
 			plan.Healthy++
 			continue
 		}
-		if rf.Placement != nil && rf.Placement.Status == "pending" && rf.Node != nil {
+		if rf.Placement != nil && rf.Placement.Status == "pending" && rf.Node != nil &&
+			rf.Node.Status != "offline" && rf.Node.Status != "quarantined" {
 			wire, _, err := s.SignTicket(tickets.OpPut, rf.Fragment.ID, rf.Node.ID, rf.Fragment.SHA256, uint64(rf.Fragment.SizeBytes))
 			if err != nil {
 				return RepairPlan{}, err

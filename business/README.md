@@ -7,5 +7,6 @@ Not product code. Investor and market artifacts for the solo builder raise.
 | `research/` | Competitive and pricing notes (`market-research` skill) |
 | `updates/` | Weekly investor notes and demo metrics |
 | `deck/` | Pitch outline and slides source |
+| `data-room/` | Index of spec, metrics, soak, security review, CI |
 
 Do not put secrets, dumps, or customer data here.

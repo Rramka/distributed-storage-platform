@@ -29,7 +29,7 @@ func (s *Store) MarkPlacementsLostByNode(ctx context.Context, nodeID uuid.UUID) 
 		FROM fragments fr
 		WHERE p.fragment_id = fr.id
 		  AND p.node_id = $1
-		  AND p.status = 'stored'
+		  AND p.status IN ('pending', 'stored')
 		RETURNING p.id, p.fragment_id, fr.chunk_id, fr.shard_index, fr.size_bytes, fr.sha256, p.node_id
 	`, nodeID)
 	if err != nil {
@@ -336,15 +336,59 @@ func (s *Store) FileHolders(ctx context.Context, fileID uuid.UUID) ([]Node, erro
 	return out, rows.Err()
 }
 
+// FileHoldersEveryChunk returns nodes that store at least one fragment of
+// every committed chunk of the file. Kill-6-of-16 uses this set so each
+// chunk drops below the repair threshold (docs/06-scheduler-and-repair.md).
+func (s *Store) FileHoldersEveryChunk(ctx context.Context, fileID uuid.UUID) ([]Node, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH core AS (
+			SELECT p.node_id
+			FROM fragment_placements p
+			JOIN fragments fr ON fr.id = p.fragment_id
+			JOIN chunks c ON c.id = fr.chunk_id
+			JOIN file_versions v ON v.id = c.version_id
+			JOIN files f ON f.id = v.file_id
+			WHERE f.id = $1 AND v.status = 'committed' AND p.status = 'stored'
+			GROUP BY p.node_id
+			HAVING count(DISTINCT c.id) = (
+				SELECT count(*) FROM chunks c2
+				JOIN file_versions v2 ON v2.id = c2.version_id
+				WHERE v2.file_id = $1 AND v2.status = 'committed'
+			)
+		)
+		SELECT `+nodeCols+`
+		FROM nodes n
+		JOIN core ON core.node_id = n.id
+		WHERE n.status NOT IN ('offline', 'quarantined')
+		ORDER BY n.id
+	`, fileID)
+	if err != nil {
+		return nil, mapQueryErr("store.fileHoldersEveryChunk", err)
+	}
+	defer rows.Close()
+	var out []Node
+	for rows.Next() {
+		n, err := scanNode(rows)
+		if err != nil {
+			return nil, mapQueryErr("store.fileHoldersEveryChunk", err)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
 // ChunkHealthByFile returns stored-placement counts per chunk of a committed file.
 func (s *Store) ChunkHealthByFile(ctx context.Context, fileID uuid.UUID) (map[uuid.UUID]int, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.id, count(p.id) FILTER (WHERE p.status = 'stored')
+		SELECT c.id, count(p.id) FILTER (
+			WHERE p.status = 'stored' AND n.status IS NOT NULL AND n.status NOT IN ('offline', 'quarantined')
+		)
 		FROM chunks c
 		JOIN file_versions v ON v.id = c.version_id
 		JOIN files f ON f.id = v.file_id
 		JOIN fragments fr ON fr.chunk_id = c.id
 		LEFT JOIN fragment_placements p ON p.fragment_id = fr.id
+		LEFT JOIN nodes n ON n.id = p.node_id
 		WHERE f.id = $1 AND v.status = 'committed'
 		GROUP BY c.id
 	`, fileID)

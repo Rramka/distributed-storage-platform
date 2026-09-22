@@ -26,8 +26,11 @@ func TestWorkerHoldsNoSigningSeed(t *testing.T) {
 
 func TestPriorityMatchesSpec(t *testing.T) {
 	t.Parallel()
-	if events.PrioritySubject(13) != "" {
-		t.Fatal("≥13 must skip")
+	if events.PrioritySubject(16) != "" {
+		t.Fatal("16 must skip")
+	}
+	if events.PrioritySubject(13) != events.SubjRepairNormal {
+		t.Fatal("13–15 backfill at normal")
 	}
 	if events.PrioritySubject(12) != events.SubjRepairNormal {
 		t.Fatal("12 normal")

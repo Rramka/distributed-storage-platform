@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DSP — kill 6 of 16, the file survives</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand">DSP</div>
+    <a class="nav" href="#waitlist">Join the waitlist</a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Decentralized object storage</p>
+      <h1>Kill 6 of 16 nodes on camera. The file still downloads. The database decrypts nothing.</h1>
+      <p class="lede">
+        Unused disks on ordinary computers become a zero-knowledge object store.
+        You encrypt on the client. The control plane never sees plaintext or the master key.
+        Reed–Solomon 10+6 and a repair loop bring the fleet back to 16/16.
+      </p>
+      <a class="cta" href="#waitlist">Get launch notice</a>
+    </section>
+
+    <section class="claims" aria-label="Demo claims">
+      <article>
+        <h2>Byte-identical download</h2>
+        <p><code>dsp put Vacation.mp4</code> then stop six holders. <code>dsp get</code> matches the original bytes while the fleet is still down.</p>
+      </article>
+      <article>
+        <h2>Self-heal to 16/16</h2>
+        <p>Health monitor marks silent nodes offline. Repair reconstructs ciphertext onto spare nodes. No human in the loop.</p>
+      </article>
+      <article>
+        <h2>Dump decrypts nothing</h2>
+        <p>A <code>pg_dump</code> of the platform database contains wrapped keys and hashes, not your file and not your passphrase.</p>
+      </article>
+    </section>
+
+    <section class="not-storj">
+      <h2>Not another storage coin</h2>
+      <p>
+        Home and office machines supply capacity. API keys and a CLI are the product surface for now.
+        Billing, dashboards, and S3 come after the durability demo is the thing investors can watch.
+      </p>
+    </section>
+
+    <section id="waitlist">
+      <h2>Waitlist</h2>
+      <p>Email only. We will not sell the list. Replace the Formspree ID before deploying (see README).</p>
+      <form action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+        <label for="email">Email</label>
+        <div class="row">
+          <input id="email" name="email" type="email" required placeholder="you@company.com" autocomplete="email">
+          <button type="submit">Join</button>
+        </div>
+        <input type="hidden" name="_subject" value="DSP waitlist">
+      </form>
+    </section>
+  </main>
+
+  <footer>
+    <p>Solo-track landing page. The live fleet visualizer is a different surface (<code>GET /demo/</code> on a running gateway).</p>
+  </footer>
+</body>
+</html>

@@ -9,7 +9,7 @@ aliases:
 
 Keeps redundancy at target levels without humans. Consumes `node.offline` from [[NATS JetStream]] `NODE_EVENTS` and jobs from `REPAIR_JOBS`.
 
-For each affected [[Chunk]], if healthy [[Fragment Placement]] count drops below 13 of 16, it:
+For each affected [[Chunk]], if healthy [[Fragment Placement]] count is below 16 of 16, it:
 
 1. Asks [[Metadata Service]] for a repair plan (GET tickets on survivors, PUT tickets on fresh nodes)
 2. Downloads any 10 surviving fragments (**ciphertext**)
@@ -19,7 +19,7 @@ For each affected [[Chunk]], if healthy [[Fragment Placement]] count drops below
 
 The worker **never holds `TICKET_SIGNING_SEED`** and **never decrypts**. [[Zero Knowledge]] survives this path.
 
-Workers are stateless NATS consumers. Priority is three subjects: `repair.critical` (≤10 healthy), `repair.high` (11), `repair.normal` (12). Throttles: `REPAIR_MAX_CONCURRENT`, `REPAIR_BUDGET_MBPS`.
+Workers are stateless NATS consumers. Priority is three subjects: `repair.critical` (≤10 healthy), `repair.high` (11), `repair.normal` (12–15). Throttles: `REPAIR_MAX_CONCURRENT`, `REPAIR_BUDGET_MBPS`.
 
 **Flap:** on `node.online`, a [[Storage Challenge]] (or a hash-GET that seeds a new challenge set) of that node's `lost` placements restores them or marks them `expiring` if reconstructed elsewhere.
 

@@ -11,7 +11,8 @@ func TestPrioritySubject(t *testing.T) {
 		want    string
 	}{
 		{16, ""},
-		{13, ""},
+		{15, SubjRepairNormal},
+		{13, SubjRepairNormal},
 		{12, SubjRepairNormal},
 		{11, SubjRepairHigh},
 		{10, SubjRepairCritical},

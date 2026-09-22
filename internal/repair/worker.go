@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const repairThreshold = 13
+const repairThreshold = 16
 
 // Worker consumes node.offline / node.online and repair jobs.
 type Worker struct {
@@ -257,12 +257,33 @@ func (w *Worker) onJob(ctx context.Context, data []byte) error {
 		}
 		rec, err := putFragment(ctx, w.CA, tgt.Endpoint, tgt.NodeID, tgt.FragmentID, tgt.Ticket, shards[idx])
 		if err != nil {
-			return err
+			slog.Warn("repair put", "err", err, "endpoint", tgt.Endpoint, "fragment", tgt.FragmentID)
+			if nid, perr := uuid.Parse(tgt.NodeID); perr == nil {
+				if fid, ferr := uuid.Parse(tgt.FragmentID); ferr == nil {
+					_, _ = w.Store.MarkPlacementLost(ctx, fid, nid)
+				}
+			}
+			continue
 		}
 		w.account(len(shards[idx]))
 		receipts = append(receipts, rec)
 	}
-	return w.Meta.Commit(ctx, job.ChunkID, receipts)
+	if len(receipts) == 0 {
+		return fmt.Errorf("repair.job: all puts failed")
+	}
+	if err := w.Meta.Commit(ctx, job.ChunkID, receipts); err != nil {
+		return err
+	}
+	healthy, err = w.Store.ChunkHealth(ctx, job.ChunkID)
+	if err != nil {
+		return err
+	}
+	if healthy < repairThreshold {
+		if err := w.Bus.PublishRepair(ctx, events.RepairJob{ChunkID: job.ChunkID, Healthy: healthy}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *Worker) fetchSources(ctx context.Context, sources []metadata.RepairSource) ([][]byte, error) {

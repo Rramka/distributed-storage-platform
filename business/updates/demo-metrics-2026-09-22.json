@@ -1,0 +1,10 @@
+{
+  "date": "2026-09-22",
+  "db_dump_decrypts_nothing": true,
+  "download_ok_during_failure": true,
+  "file_bytes": 32505856,
+  "final_healthy_per_chunk": 16,
+  "killed_nodes": 6,
+  "repair_latency_seconds": 296,
+  "visualizer": "live"
+}

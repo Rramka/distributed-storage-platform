@@ -138,7 +138,7 @@ func (s *Store) MarkPlacementLost(ctx context.Context, fragmentID, nodeID uuid.U
 		WHERE p.fragment_id = fr.id
 		  AND p.fragment_id = $1
 		  AND p.node_id = $2
-		  AND p.status = 'stored'
+		  AND p.status IN ('pending', 'stored')
 		RETURNING p.id, p.fragment_id, fr.chunk_id, fr.shard_index, fr.size_bytes, fr.sha256, p.node_id
 	`, fragmentID, nodeID).Scan(
 		&lp.PlacementID, &lp.FragmentID, &lp.ChunkID, &lp.ShardIndex, &lp.SizeBytes, &lp.SHA256, &lp.NodeID,
