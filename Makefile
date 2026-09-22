@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
-.PHONY: up down ps logs test test-short vet fmt migrate build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4 demo invariants
+.PHONY: up down ps logs test test-short vet fmt migrate migrate-url build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4 demo invariants soak
 
 up:
 	$(COMPOSE) up -d --wait postgres
@@ -31,6 +31,9 @@ demo:
 
 invariants:
 	go run ./cmd/harness invariants
+
+soak:
+	go run ./cmd/harness soak --duration $${DURATION:-2h}
 
 export-ca:
 	@mkdir -p .local
@@ -64,5 +67,9 @@ vet:
 migrate:
 	@for f in deploy/migrations/*.sql; do \
 		echo "applying $$f"; \
-		$(COMPOSE) exec -T postgres psql -U dsp -d dsp -f /docker-entrypoint-initdb.d/$$(basename $$f); \
+		$(COMPOSE) exec -T postgres psql -U dsp -d dsp -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/$$(basename $$f); \
 	done
+
+migrate-url:
+	@test -n "$(POSTGRES_URL)" || (echo "POSTGRES_URL required" && exit 1)
+	./scripts/apply-migrations.sh "$(POSTGRES_URL)"

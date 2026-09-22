@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -11,21 +10,7 @@ import (
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	if testing.Short() {
-		t.Skip("skipping postgres integration test")
-	}
-	url := os.Getenv("POSTGRES_URL")
-	if url == "" {
-		url = "postgres://dsp:dsp@127.0.0.1:5433/dsp?sslmode=disable"
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	s, err := Open(ctx, url)
-	if err != nil {
-		t.Skipf("postgres unavailable: %v", err)
-	}
-	t.Cleanup(s.Close)
-	return s
+	return OpenForTest(t)
 }
 
 func TestNormalizePath(t *testing.T) {

@@ -49,6 +49,8 @@ type Challenger struct {
 
 	GetFragment func(ctx context.Context, endpoint string, nodeID, fragID uuid.UUID, ticket string) ([]byte, error)
 	DoChallenge func(ctx context.Context, endpoint string, nodeID, fragID uuid.UUID, ticket string, offset, length int, nonce []byte) ([]byte, error)
+	// OnRepair, if set, is invoked instead of Bus.PublishRepair (tests).
+	OnRepair func(ctx context.Context, job events.RepairJob) error
 }
 
 // ChallengeDurationsFromEnv reads CHALLENGE_INTERVAL / CHALLENGE_TICK.
@@ -181,10 +183,14 @@ func (c *Challenger) failPlacement(ctx context.Context, t store.AuditTarget) err
 	if err != nil {
 		return err
 	}
+	job := events.RepairJob{ChunkID: lp.ChunkID, Healthy: healthy}
+	if c.OnRepair != nil {
+		return c.OnRepair(ctx, job)
+	}
 	if c.Bus == nil {
 		return nil
 	}
-	return c.Bus.PublishRepair(ctx, events.RepairJob{ChunkID: lp.ChunkID, Healthy: healthy})
+	return c.Bus.PublishRepair(ctx, job)
 }
 
 // ComputeChallengeSet builds N (offset, length, nonce, expected) tuples from ciphertext.

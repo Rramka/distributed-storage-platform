@@ -36,5 +36,6 @@ sequenceDiagram
 - **Ciphertext only** — [[Zero Knowledge]] holds; worker has no signing seed
 - **Idempotent** — re-check health before acting (node may have flapped back); NATS redelivers crashed jobs
 - **Flap handling** — returning node's fragments are re-validated with a [[Storage Challenge]] (or a hash-GET that seeds a new set); only actually reconstructed copies expire the old ones as surplus
+- **Corrupt detection** — `harness corrupt <agent>` flips bytes on disk; audit mismatch → lost placement → this loop. Repair and `dsp get` skip shards whose SHA-256 does not match metadata.
 
-See [[Repair Service]], [[Self-Healing]], [[Erasure Coding]]
+See [[Repair Service]], [[Self-Healing]], [[Erasure Coding]], [[Storage Challenge]]

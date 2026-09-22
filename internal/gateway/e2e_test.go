@@ -20,13 +20,7 @@ import (
 )
 
 func TestLiveCRUD(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live stack test")
-	}
-	pg := os.Getenv("POSTGRES_URL")
-	if pg == "" {
-		pg = "postgres://dsp:dsp@127.0.0.1:5433/dsp?sslmode=disable"
-	}
+	st := store.OpenForTest(t)
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
 		redisURL = "redis://127.0.0.1:6379"
@@ -34,11 +28,6 @@ func TestLiveCRUD(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	st, err := store.Open(ctx, pg)
-	if err != nil {
-		t.Skipf("postgres unavailable: %v", err)
-	}
-	t.Cleanup(st.Close)
 
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
@@ -47,6 +36,9 @@ func TestLiveCRUD(t *testing.T) {
 	rdb := redis.NewClient(opt)
 	t.Cleanup(func() { _ = rdb.Close() })
 	if err := rdb.Ping(ctx).Err(); err != nil {
+		if os.Getenv("DSP_REQUIRE_PG") != "" {
+			t.Fatalf("redis required: %v", err)
+		}
 		t.Skipf("redis unavailable: %v", err)
 	}
 

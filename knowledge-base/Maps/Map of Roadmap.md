@@ -27,6 +27,8 @@ See [[Milestones]] for M0–M6 (foundations → metadata → happy-path encrypte
 
 W10: fleet visualizer at gateway `GET /demo/` (`DEMO_MODE=1`) polling `GET /v1/demo/fleet`. Scripted capture: `make demo`.
 
+W11: soak (`make soak` / `harness soak`), hermetic invariant + red-team CI job, nightly Compose fleet job. `harness corrupt` is implemented; `partition` and `throttle` are not. Solo soak is hours over tens of files, not days over thousands.
+
 ## After MVP
 
 [[Long-term Vision]]: S3 + payments → file sync / block storage → containers / serverless → GPU / VMs / K8s. Each phase reuses the storage network, [[Reputation]], and ledger rails.

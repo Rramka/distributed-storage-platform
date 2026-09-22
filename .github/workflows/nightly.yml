@@ -1,0 +1,49 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  fleet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+      - name: Bring up Compose fleet
+        run: make up
+      - name: Seed fleet
+        run: make fleet-seed
+      - name: Put fixture
+        env:
+          DSP_API_URL: http://127.0.0.1:8080
+          DSP_PASSPHRASE: nightly-soak-pass
+        run: |
+          mkdir -p .local
+          docker compose -f deploy/compose/docker-compose.yml cp agent1:/seed/api.key .local/api.key
+          dd if=/dev/urandom of=/tmp/dsp-fixture.bin bs=1048576 count=1
+          export DSP_API_KEY=$(cat .local/api.key)
+          export DSP_CA_FILE=.local/ca.crt
+          go run ./cmd/dsp buckets create -name soak || true
+          go run ./cmd/dsp put /tmp/dsp-fixture.bin soak:/fixture.bin
+      - name: Chaos M4
+        run: make chaos-m4 | tee chaos-report.txt
+      - name: Invariants
+        run: make invariants
+      - name: Compose logs
+        if: always()
+        run: docker compose -f deploy/compose/docker-compose.yml logs > compose-logs.txt
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-fleet
+          path: |
+            chaos-report.txt
+            compose-logs.txt
+            business/updates/
+            .local/ca.crt

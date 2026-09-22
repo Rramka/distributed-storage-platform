@@ -37,7 +37,7 @@ These remain specified in the docs for later phases. They are **out of the solo 
 - **W6–7** — Reed-Solomon 10+6, 16-way placement, plan/transfer/commit with resume. Exit: `dsp put` / `dsp get` byte-identical with 6 agents stopped.
 - **W8–9** — Health monitor state machine, NATS events, repair service, chaos harness. Exit: the M4 test — kill 6 of 16, back to 16/16, downloads never fail. Challenges and scoring follow that exit.
 - **W10** — Fleet visualizer web page (`GET /demo/` behind `DEMO_MODE=1`) and the scripted demo (`make demo`). **Shipped with the M4 follow-up slice.**
-- **W11** — Soak run, security review, red-team DB-dump fixture, invariant CI.
+- **W11** — Soak run, security review, red-team DB-dump fixture, invariant CI. **Shipped.** `harness soak` runs a randomized kill/flap/corrupt schedule (hours, tens of files on a laptop — not the original “days / thousands of files” sizing). `partition` and `throttle` remain unimplemented. CI: hermetic invariant + red-team job on every PR; nightly Compose fleet job.
 - **W12** — Demo video, deck, data room, landing page with waitlist.
 
 A fundraise track runs in parallel (~2 hours/week): market research, competitive comparison, deck, weekly investor update. See `business/` and the Cursor skills `market-research` / `investor-update` / `demo-capture`.
@@ -118,6 +118,8 @@ harness verbs:
   clock-skew, disk-full, slow-disk (via tc/cgroups)
 ```
 
+`kill`, `drain`, `flap`, `corrupt`, `m4`, `demo`, `invariants`, and `soak` are implemented. `partition` and `throttle` remain unimplemented (need iptables/tc).
+
 ### Test layers
 
 | Layer | What | Examples |
@@ -126,7 +128,7 @@ harness verbs:
 | Integration | Service pairs against real Postgres/Redis/NATS | upload commit transactionality, heartbeat expiry → state transition, challenge verify |
 | End-to-end | CLI against full compose stack | put/get/delete/rename/list; resume after interrupt; wrong-passphrase fails cleanly |
 | **Chaos** | Harness scenarios against the fleet | the M4 exit test; corrupt-fragment detection → repair; regional partition (all "EU" nodes cut) → availability maintained; mass failure repair within budget |
-| Durability soak | Long-running (days) randomized kill/flap/corrupt schedule against thousands of files | zero chunks ever below 10 healthy; measured repair latency distribution |
+| Durability soak | Randomized kill/flap/corrupt on the Compose fleet | Solo-track scale is hours over tens of files (`make soak`, default 2h), not days over thousands. Zero chunks below 10 healthy; measured repair latency |
 | Security | Adversarial | node serving tampered bytes is caught and penalized; replayed/expired/cross-node tickets rejected; platform DB dump decrypts nothing (red-team fixture) |
 
 ### Continuously measured invariants (CI + soak)

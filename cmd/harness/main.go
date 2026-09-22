@@ -19,7 +19,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: harness kill|drain|flap|status|partition|corrupt|throttle|m4|demo|invariants")
+		fmt.Fprintln(os.Stderr, "usage: harness kill|drain|flap|status|partition|corrupt|throttle|m4|demo|invariants|soak")
 		os.Exit(2)
 	}
 	if err := run(os.Args[1], os.Args[2:]); err != nil {
@@ -38,14 +38,18 @@ func run(cmd string, args []string) error {
 		return cmdFlap(args)
 	case "status":
 		return cmdStatus(args)
-	case "partition", "corrupt", "throttle":
-		return fmt.Errorf("%s: not implemented (needs challenge/network slice)", cmd)
+	case "partition", "throttle":
+		return fmt.Errorf("%s: not implemented (needs network slice)", cmd)
+	case "corrupt":
+		return cmdCorrupt(args)
 	case "m4":
 		return cmdM4(args)
 	case "demo":
 		return cmdDemo(args)
 	case "invariants":
 		return cmdInvariants(args)
+	case "soak":
+		return cmdSoak(args)
 	default:
 		return fmt.Errorf("unknown verb %q", cmd)
 	}
@@ -58,12 +62,23 @@ func composeFile() string {
 	return "deploy/compose/docker-compose.yml"
 }
 
-func compose(args ...string) *exec.Cmd {
+func composeCmd(args ...string) *exec.Cmd {
 	all := append([]string{"compose", "-f", composeFile()}, args...)
-	c := exec.Command("docker", all...)
+	return exec.Command("docker", all...)
+}
+
+func compose(args ...string) *exec.Cmd {
+	c := composeCmd(args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	return c
+}
+
+func dockerStart(agent string) error {
+	c := exec.Command("docker", "start", "dsp-"+agent+"-1")
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
 }
 
 func openStore() (*store.Store, error) {
@@ -157,7 +172,7 @@ func cmdFlap(args []string) error {
 		return err
 	}
 	time.Sleep(period)
-	return compose("start", args[0]).Run()
+	return dockerStart(args[0])
 }
 
 func cmdStatus(args []string) error {

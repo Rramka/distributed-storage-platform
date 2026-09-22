@@ -16,17 +16,14 @@ Primary test tool from `docs/10-mvp-roadmap.md`. Operate on the Compose fleet, n
 ```text
 kill <n> nodes           # SIGKILL
 drain <node>             # graceful retirement
-partition <nodes>        # network cut
-corrupt <node> <frac>    # flip bytes in stored fragments
-throttle <node> <mbps>   # degrade bandwidth
-flap <node> <period>     # reboot loops
+partition <nodes>        # stubbed (needs iptables)
+corrupt <agent> [--frac] # flip 1 byte / 4096-byte block in .frag files
+throttle <node> <mbps>   # stubbed (needs tc)
+flap <node> <period>     # kill then docker start
+soak [--duration 2h]     # randomized kill/flap/corrupt, max 6 down
 ```
 
-Until `cmd/harness` exists, drive verbs with `docker compose` in `deploy/compose/`:
-
-- kill: `docker compose kill <agent>`
-- drain: send SIGTERM, wait, then `stop`
-- flap: kill + start in a loop
+Drive with `go run ./cmd/harness <verb>` or `make chaos-m4` / `make soak`. `partition` and `throttle` remain unimplemented.
 
 ## Default M4 scenario
 

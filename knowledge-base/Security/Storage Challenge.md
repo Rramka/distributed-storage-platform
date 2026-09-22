@@ -22,6 +22,6 @@ Fresh nonce → cannot precompute. Random range → must retain the whole [[Frag
 
 Pre-computed challenge sets minted by [[Health Monitor]] (refresh path): ticketed GET, verify hash, store N `(offset, length, nonce, expected)` tuples — never the bytes. Spend one per audit; refill when the set is low. The client does **not** register responses at commit. `GET /challenge` uses a metadata-minted `challenge` ticket ([[Placement Ticket]] family); Metadata is the sole signer.
 
-Failed / slow challenge → [[Fragment Placement]] `lost`, [[Reputation]] damage, [[Repair Loop]]. Honest local-scrub self-report is penalized far less than being caught.
+Failed / slow challenge → [[Fragment Placement]] `lost`, [[Reputation]] damage, [[Repair Loop]]. Honest local-scrub self-report is penalized far less than being caught. Chaos: `harness corrupt <agent> [--frac 0.25]` flips one byte per 4096-byte block so the next spend is a hit.
 
 Post-MVP: Merkle proofs with unlimited verifications ([[Long-term Vision]]).
