@@ -8,7 +8,7 @@ on:
 jobs:
   fleet:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -32,6 +32,13 @@ jobs:
           go run ./cmd/dsp put /tmp/dsp-fixture.bin soak:/fixture.bin
       - name: Chaos M4
         run: make chaos-m4 | tee chaos-report.txt
+      - name: Restart agents after M4
+        run: |
+          for i in $(seq 1 24); do docker start "dsp-agent${i}-1" || true; done
+      - name: Regional partition
+        run: make chaos-partition | tee partition-report.txt
+      - name: Soak
+        run: go run ./cmd/harness soak --duration 20m --seed ${{ github.run_number }} | tee soak-report.txt
       - name: Invariants
         run: make invariants
       - name: Compose logs
@@ -44,6 +51,8 @@ jobs:
           name: nightly-fleet
           path: |
             chaos-report.txt
+            partition-report.txt
+            soak-report.txt
             compose-logs.txt
             business/updates/
             .local/ca.crt

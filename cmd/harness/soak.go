@@ -70,7 +70,13 @@ func cmdSoak(args []string) error {
 	started := time.Now().UTC()
 	deadline := started.Add(duration)
 	down := map[string]bool{}
-	counts := map[string]int{"kill": 0, "flap": 0, "corrupt": 0}
+	paused := map[string]bool{}
+	defer func() {
+		for name := range paused {
+			_ = compose("unpause", name).Run()
+		}
+	}()
+	counts := map[string]int{"kill": 0, "flap": 0, "corrupt": 0, "partition": 0}
 	var lats []int
 	tracked, err := soakTrackChunks(ctx, s)
 	if err != nil {
@@ -95,7 +101,7 @@ func cmdSoak(args []string) error {
 	}
 
 	fmt.Println("## Chaos report")
-	fmt.Println("- Scenario: soak kill/flap/corrupt")
+	fmt.Println("- Scenario: soak kill/flap/corrupt/partition")
 	fmt.Println("- Started:", started.Format(time.RFC3339))
 	fmt.Println("- Seed:", seed)
 	fmt.Println("- Duration:", duration)
@@ -108,15 +114,15 @@ func cmdSoak(args []string) error {
 		}
 		verb := soakPickVerb(rng)
 		if minH < soakWarn {
-			for len(down) > 0 {
-				if err := soakStartOne(down); err != nil {
+			for len(down)+len(paused) > 0 {
+				if err := soakRecoverOne(down, paused); err != nil {
 					return err
 				}
 			}
 			verb = "flap"
 		}
-		agent := soakPickAgent(rng, down, verb)
-		if err := soakApply(verb, agent, down); err != nil {
+		agent := soakPickAgent(rng, down, paused)
+		if err := soakApply(verb, agent, down, paused); err != nil {
 			notes = append(notes, fmt.Sprintf("round %d %s %s: %v", rounds, verb, agent, err))
 			fmt.Println("- Notes:", err)
 			_, _ = writeSoakMetrics(started, duration, seed, counts, minObs, lats, invFails, rounds, notes)
@@ -184,16 +190,18 @@ func soakPickVerb(rng *rand.Rand) string {
 		return "kill"
 	case 4, 5, 6:
 		return "flap"
-	default:
+	case 7, 8:
 		return "corrupt"
+	default:
+		return "partition"
 	}
 }
 
-func soakPickAgent(rng *rand.Rand, down map[string]bool, verb string) string {
+func soakPickAgent(rng *rand.Rand, down, paused map[string]bool) string {
 	var candidates []string
 	for i := 1; i <= soakAgentCount; i++ {
 		name := fmt.Sprintf("agent%d", i)
-		if down[name] {
+		if down[name] || paused[name] {
 			continue
 		}
 		candidates = append(candidates, name)
@@ -204,11 +212,11 @@ func soakPickAgent(rng *rand.Rand, down map[string]bool, verb string) string {
 	return candidates[rng.Intn(len(candidates))]
 }
 
-func soakApply(verb, agent string, down map[string]bool) error {
+func soakApply(verb, agent string, down, paused map[string]bool) error {
 	switch verb {
 	case "kill":
-		if len(down) >= soakMaxDown {
-			if err := soakStartOne(down); err != nil {
+		if len(down)+len(paused) >= soakMaxDown {
+			if err := soakRecoverOne(down, paused); err != nil {
 				return err
 			}
 		}
@@ -226,12 +234,35 @@ func soakApply(verb, agent string, down map[string]bool) error {
 			return err
 		}
 		delete(down, agent)
+		delete(paused, agent)
 		return nil
 	case "corrupt":
 		return cmdCorrupt([]string{agent, "--frac", "0.25"})
+	case "partition":
+		if len(down)+len(paused) >= soakMaxDown {
+			if err := soakRecoverOne(down, paused); err != nil {
+				return err
+			}
+		}
+		if err := compose("pause", agent).Run(); err != nil {
+			return err
+		}
+		paused[agent] = true
+		return nil
 	default:
 		return fmt.Errorf("soak: unknown verb %s", verb)
 	}
+}
+
+func soakRecoverOne(down, paused map[string]bool) error {
+	for name := range paused {
+		if err := compose("unpause", name).Run(); err != nil {
+			return err
+		}
+		delete(paused, name)
+		return nil
+	}
+	return soakStartOne(down)
 }
 
 func soakStartOne(down map[string]bool) error {

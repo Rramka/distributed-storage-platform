@@ -19,7 +19,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: harness kill|drain|flap|status|partition|corrupt|throttle|m4|demo|invariants|soak")
+		fmt.Fprintln(os.Stderr, "usage: harness kill|drain|flap|status|partition|corrupt|m4|demo|invariants|soak")
 		os.Exit(2)
 	}
 	if err := run(os.Args[1], os.Args[2:]); err != nil {
@@ -38,8 +38,8 @@ func run(cmd string, args []string) error {
 		return cmdFlap(args)
 	case "status":
 		return cmdStatus(args)
-	case "partition", "throttle":
-		return fmt.Errorf("%s: not implemented (needs network slice)", cmd)
+	case "partition":
+		return cmdPartition(args)
 	case "corrupt":
 		return cmdCorrupt(args)
 	case "m4":

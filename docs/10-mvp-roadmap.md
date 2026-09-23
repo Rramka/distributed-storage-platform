@@ -37,8 +37,9 @@ These remain specified in the docs for later phases. They are **out of the solo 
 - **W6–7** — Reed-Solomon 10+6, 16-way placement, plan/transfer/commit with resume. Exit: `dsp put` / `dsp get` byte-identical with 6 agents stopped.
 - **W8–9** — Health monitor state machine, NATS events, repair service, chaos harness. Exit: the M4 test — kill 6 of 16, back to 16/16, downloads never fail. Challenges and scoring follow that exit.
 - **W10** — Fleet visualizer web page (`GET /demo/` behind `DEMO_MODE=1`) and the scripted demo (`make demo`). **Shipped with the M4 follow-up slice.**
-- **W11** — Soak run, security review, red-team DB-dump fixture, invariant CI. **Shipped.** `harness soak` runs a randomized kill/flap/corrupt schedule (hours, tens of files on a laptop — not the original “days / thousands of files” sizing). `partition` and `throttle` remain unimplemented. CI: hermetic invariant + red-team job on every PR; nightly Compose fleet job.
+- **W11** — Soak run, security review, red-team DB-dump fixture, invariant CI. **Shipped.** `harness soak` runs a randomized kill/flap/corrupt schedule (hours, tens of files on a laptop — not the original “days / thousands of files” sizing). CI: hermetic invariant + red-team job on every PR; nightly Compose fleet job.
 - **W12** — Demo video, deck, data room, landing page with waitlist. **Shipped (harness + artifacts).** `make demo` writes `business/updates/demo-metrics-YYYY-MM-DD.json`. The landing page is static (`web/landing/`) with a third-party Formspree waitlist — no control-plane route, no waitlist table. Screen recording of the visualizer remains a human step (`business/updates/demo-script-w12.md`).
+- **W13** — Chaos completeness, honest CI, property coverage. **Shipped.** `harness partition` freezes a region with `docker compose pause` (cgroup freezer, not iptables: published-port DNAT is not restored by `docker network connect`, so a bridge cut cannot heal without a restart). While partitioned, every chunk must stay ≥ 13 healthy (16 − region cap). `throttle` is retired: `bandwidth_factor` is a documented neutral constant (1.0), so a `tc` cap would not change placement. Phantom `clock-skew` / `disk-full` / `slow-disk` verbs are dropped from the list. CI `test` job is `go test ./... -short`; the `invariants` job runs `go test ./...` against Postgres. Nightly runs the regional partition scenario and a 20-minute soak.
 
 A fundraise track runs in parallel (~2 hours/week): market research, competitive comparison, deck, weekly investor update. See `business/` and the Cursor skills `market-research` / `investor-update` / `demo-capture`.
 
@@ -111,14 +112,12 @@ Docker Compose (and later a k8s profile) runs the control plane plus **N agent c
 harness verbs:
   kill <n> nodes           # abrupt loss (SIGKILL)
   drain <node>             # graceful retirement
-  partition <nodes>        # iptables-based network cuts
+  partition <nodes>        # cgroup freeze (docker compose pause); --region cuts one region
   corrupt <node> <frac>    # flip bytes in stored fragments
-  throttle <node> <mbps>   # degrade bandwidth
   flap <node> <period>     # reboot loops
-  clock-skew, disk-full, slow-disk (via tc/cgroups)
 ```
 
-`kill`, `drain`, `flap`, `corrupt`, `m4`, `demo`, `invariants`, and `soak` are implemented. `partition` and `throttle` remain unimplemented (need iptables/tc).
+`kill`, `drain`, `flap`, `corrupt`, `partition`, `m4`, `demo`, `invariants`, and `soak` are implemented. `throttle` is retired: nothing in scoring consumes network throughput (`bandwidth_factor` is a documented neutral constant of 1.0 in [06-scheduler-and-repair.md](06-scheduler-and-repair.md)).
 
 ### Test layers
 

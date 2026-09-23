@@ -32,7 +32,7 @@ Lose passphrase **and** recovery key → data is gone. The platform cannot reset
 
 | Principal | Mechanism |
 |---|---|
-| [[Customer]] | Password → JWT; [[API Key]] for machines; TOTP 2FA |
+| [[Customer]] | Password → JWT (**deferred** on the solo track; [[API Key]] only for CLI and agents); TOTP 2FA |
 | [[Node]] | Local keypair + CSR → platform CA cert; traffic is [[mTLS]] |
 | Services | Per-service mTLS; Ledger is sole writer of [[Ledger Entry]]; nothing can UPDATE [[Audit Log]] |
 

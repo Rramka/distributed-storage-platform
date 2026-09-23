@@ -399,6 +399,59 @@ func bytes32(seed byte) []byte {
 	return b
 }
 
+func TestNodesByRegion(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "region-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag := uuid.NewString()[:8]
+	want := "eu-west-" + tag
+	for i, region := range []string{want, want, "us-east-" + tag} {
+		_, err := s.CreateNode(ctx, CreateNodeParams{
+			OwnerID:         u.ID,
+			CertFingerprint: []byte(uuid.NewString()),
+			PublicKey:       bytes32(byte(i + 20)),
+			CertPEM:         "pem",
+			CertExpiresAt:   time.Now().Add(time.Hour),
+			OS:              "linux",
+			AgentVersion:    "test",
+			Region:          region,
+			Endpoint:        "127.0.0.1:" + itoaStore(9000+i),
+			CapacityBytes:   1 << 30,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.NodesByRegion(ctx, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d want 2", len(got))
+	}
+	empty, err := s.NodesByRegion(ctx, "no-such-"+tag)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty: %d %v", len(empty), err)
+	}
+}
+
+func itoaStore(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [16]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(b[i:])
+}
+
 func stringsUpper(s string) string {
 	b := []byte(s)
 	for i, c := range b {

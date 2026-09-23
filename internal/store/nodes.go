@@ -115,6 +115,24 @@ func (s *Store) ListNodesByOwner(ctx context.Context, ownerID uuid.UUID) ([]Node
 	return out, rows.Err()
 }
 
+// NodesByRegion returns every node whose region column matches.
+func (s *Store) NodesByRegion(ctx context.Context, region string) ([]Node, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+nodeCols+` FROM nodes WHERE region = $1 ORDER BY id`, region)
+	if err != nil {
+		return nil, mapQueryErr("store.nodesByRegion", err)
+	}
+	defer rows.Close()
+	var out []Node
+	for rows.Next() {
+		n, err := scanNode(rows)
+		if err != nil {
+			return nil, mapQueryErr("store.nodesByRegion", err)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
 // ListOnlineNodes returns nodes with status=online.
 func (s *Store) ListOnlineNodes(ctx context.Context) ([]Node, error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+nodeCols+` FROM nodes WHERE status = 'online' ORDER BY id`)

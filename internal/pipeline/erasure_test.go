@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"math/big"
 	"testing"
+	"testing/quick"
 )
 
 func TestEncodeReconstructSizes(t *testing.T) {
@@ -50,20 +51,17 @@ func TestEncodeReconstructSizes(t *testing.T) {
 	}
 }
 
-func TestReconstructAnyTenOfSixteen(t *testing.T) {
+func TestPropertyReconstructAnyTenOfSixteen(t *testing.T) {
 	t.Parallel()
-	const trials = 32
-	for i := 0; i < trials; i++ {
-		n := 1 + i*97
-		chunk := make([]byte, n)
-		if _, err := rand.Read(chunk); err != nil {
-			t.Fatal(err)
+	fn := func(payload []byte, seed uint64) bool {
+		if len(payload) > 4096 {
+			payload = payload[:4096]
 		}
-		shards, err := EncodeChunk(chunk)
+		shards, err := EncodeChunk(payload)
 		if err != nil {
-			t.Fatal(err)
+			return false
 		}
-		drop := pickDistinct(t, ECParity, ECTotal)
+		drop := dropSet(seed, ECParity, ECTotal)
 		partial := make([][]byte, ECTotal)
 		for i, s := range shards {
 			if drop[i] {
@@ -71,13 +69,14 @@ func TestReconstructAnyTenOfSixteen(t *testing.T) {
 			}
 			partial[i] = s
 		}
-		got, err := ReconstructChunk(partial, n)
+		got, err := ReconstructChunk(partial, len(payload))
 		if err != nil {
-			t.Fatalf("trial %d: %v", i, err)
+			return false
 		}
-		if !bytes.Equal(got, chunk) {
-			t.Fatalf("trial %d mismatch", i)
-		}
+		return bytes.Equal(got, payload)
+	}
+	if err := quick.Check(fn, &quick.Config{MaxCount: 64}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -134,6 +133,22 @@ func TestReconstructTooFewShards(t *testing.T) {
 	if _, err := ReconstructChunk(shards[:8], len(chunk)); err != ErrShards {
 		t.Fatalf("short slice: %v", err)
 	}
+}
+
+func dropSet(seed uint64, k, n int) map[int]bool {
+	out := map[int]bool{}
+	if n <= 0 || k <= 0 {
+		return out
+	}
+	s := seed
+	if s == 0 {
+		s = 1
+	}
+	for len(out) < k {
+		s = s*6364136223846793005 + 1
+		out[int(s%uint64(n))] = true
+	}
+	return out
 }
 
 func pickDistinct(t *testing.T, k, n int) map[int]bool {

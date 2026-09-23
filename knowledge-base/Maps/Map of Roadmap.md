@@ -27,9 +27,11 @@ See [[Milestones]] for M0–M6 (foundations → metadata → happy-path encrypte
 
 W10: fleet visualizer at gateway `GET /demo/` (`DEMO_MODE=1`) polling `GET /v1/demo/fleet`. Scripted capture: `make demo`.
 
-W11: soak (`make soak` / `harness soak`), hermetic invariant + red-team CI job, nightly Compose fleet job. `harness corrupt` is implemented; `partition` and `throttle` are not. Solo soak is hours over tens of files, not days over thousands.
+W11: soak (`make soak` / `harness soak`), hermetic invariant + red-team CI job, nightly Compose fleet job. `harness corrupt` is implemented. Solo soak is hours over tens of files, not days over thousands.
 
 W12: `make demo` writes `business/updates/demo-metrics-YYYY-MM-DD.json`. Static waitlist at `web/landing/` (Formspree; not served by the gateway). Screen recording is a human step.
+
+W13: `harness partition` (`docker compose pause`, not iptables) with a ≥ 13/16 floor while a region is cut. `throttle` retired (neutral `bandwidth_factor`). CI `test` job is `-short`; `invariants` job runs `go test ./...` against Postgres. Nightly runs partition + a 20-minute soak.
 
 ## After MVP
 

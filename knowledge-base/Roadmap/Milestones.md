@@ -21,9 +21,10 @@ Every milestone ends with something that **runs end-to-end**.
 | **M4** Health + repair | [[Health Monitor]] state machine, [[Repair Service]], chaos harness, [[Storage Challenge]], scored [[Scheduler]] | Kill 6 of 16; minutes later 16/16 healthy; download works throughout | exit + follow-up shipped |
 | **W11** Soak + CI | `harness soak` kill/flap/corrupt, red-team `pg_dump` fixture, invariant CI + nightly fleet | No chunk below 10 healthy; DB dump decrypts nothing | shipped |
 | **W12** Demo + raise | `make demo` metrics, deck outline, data room, static waitlist (`web/landing/`) | Kill 6 of 16, download during failure, 16/16, dump decrypts nothing | shipped |
+| **W13** Chaos + CI | `harness partition` (cgroup freeze), `throttle` retired, honest CI, property/fuzz tests | Region cut stays ≥ 13/16; `go test ./...` against Postgres | shipped |
 | **M5** Ledger | Usage stream, double-entry, `R`, [[Quota]] | Accelerated "month" produces balanced books | deferred |
 | **M6** Dashboards + harden | [[Web Dashboard]], [[Admin Dashboard]], installers, chaos pass | Full [[MVP Scope]], demoable by a non-developer | deferred |
 
-M4 is the core claim — heaviest test investment. Chaos harness: kill, drain, partition, corrupt, throttle, flap.
+M4 is the core claim — heaviest test investment. Chaos harness: kill, drain, partition (cgroup freeze), corrupt, flap. `throttle` is retired.
 
 Related: [[Map of Roadmap]], [[Go]]

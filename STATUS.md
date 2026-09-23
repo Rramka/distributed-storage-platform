@@ -1,34 +1,38 @@
 # Status
 
-Last updated: 2026-09-22 (W12: demo capture, deck + data room, landing page)
+Last updated: 2026-09-22 (W13: chaos completeness, honest CI, property coverage)
 
 ## Current milestone
 
-**W12** (solo builder track) — **shipped** (harness + artifacts; screen recording is a human step)
+**W13** (solo builder track) — **shipped**
 
-Demo metrics, sourced market notes, deck outline, data-room index, and a static waitlist page. M0–M4 remain the investable artifact.
+`harness partition`, `throttle` retired, CI that cannot skip Postgres silently, property/fuzz tests. M0–M4 remain the investable artifact. Screen recording is still a human step.
 
 ## Shipped this session
 
-- Clean Compose fleet (`make fleet-down && make up`); 31 MiB `Vacation.mp4` (two ciphertext chunks; 32 MiB plaintext overflows to a third chunk and exhausts the 24×2 probation quota)
-- `make invariants` clean on that file before the take
-- `harness demo`: clock starts after kill; waits for health to dip then return to 16/16; `pg_dump` no longer fails because stdout was already attached
-- Kill set is nodes that hold **every** chunk, so each chunk drops below the repair threshold
-- Repair backfill to 16/16: skip failed PUTs, mark those pendings lost, queue 13–15 at normal priority (docs/06 updated)
-- `LatestNodeStats` coalesces NULL audit-only rollup columns (Place was 500 after the first challenge bump)
-- `business/updates/demo-metrics-2026-09-22.json`: download during failure **true**, **16/16**, dump **true**, **296s** from kill (includes 5 min offline grace)
-- Market research, deck outline, data room, investor note, `web/landing/` Formspree waitlist (no gateway route, no table)
+- `harness partition <agent...> | --region <r> [--for 8m] [--heal]`: `docker compose pause`/`unpause` (cgroup freezer, not iptables). SIGINT-safe deferred unpause. Floor while partitioned: ≥ 13/16 (16 − region cap).
+- `NodesByRegion` on the store; non-compose leftover endpoints (stale `19006`–`19008` rows) are skipped.
+- Soak rotation includes `partition`; paused agents count against the max-6-down cap and are unpaused on soak exit. `make chaos-partition`.
+- `throttle` retired: `bandwidth_factor` is a documented 1.0 constant, so a `tc` cap would not change placement. Phantom `clock-skew`/`disk-full`/`slow-disk` dropped from the verb list.
+- CI `test` job is `go test ./... -short -count=1`. `invariants` job runs `go test ./...` with `DSP_REQUIRE_PG=1`. Nightly: restart killed agents via `docker start`, regional partition, 20-minute soak; timeout 120m.
+- `testing/quick` properties: erasure any-10-of-16, encrypt/decrypt across the 16 MiB chunk boundary, receipts mutated-field rejection. Fuzz: `FuzzChunkDecrypt`, `FuzzReceiptParse`.
+- Vault: deleted empty `Untitled.md`; heartbeat transport corrected in `Technology/gRPC.md`; JWT-deferred caveat on `Maps/Map of Security.md`; stale M4 deferral dropped from `Data Plane/Node Agent.md`.
 
 ## Chaos / soak report
 
+W13 partition (2026-09-22): `--region eu-west --for 15s` paused agent7/8/9, min healthy stayed 16/16 (inside the 5 min offline grace), unpause left none frozen.
+
+Partition-heal finding: lost placements do **not** silently become stored on unpause. Healthmon `offline→online` publishes `node.online`; the repair worker's flap path restores copies that were not reconstructed elsewhere and expires surplus copies (`RestorePlacements` / `ExpirePlacements`). That is (a), not a 17th stored placement. A full 8-minute cycle past `HEALTH_OFFLINE_AFTER` was not measured on this volume: `make invariants` already fails with 2 cap-violating chunks from leftover `127.0.0.1:1900x` nodes. Nightly on a fresh `make up` is the honest check.
+
 W12 demo (2026-09-22): kill 6 every-chunk holders, `dsp get` byte-identical while down, heal to 16/16 in 296s. Visualizer live at `/demo/`.
 
-W11 soak unchanged: 2h seed=21, min healthy 10/16. `partition` and `throttle` remain unimplemented.
+W11 soak unchanged: 2h seed=21, min healthy 10/16.
 
 ## Blocked
 
 - Screen recording still needs a human with `demo-script-w12.md`. Formspree `YOUR_FORM_ID` must be replaced before the landing page is public.
-- Ledger / dashboards / JWT / S3 remain deferred.
+- Ledger / dashboards / JWT / S3 remain deferred (M4 demo recording gate still open).
+- This Compose volume still has cap-violating leftover nodes; `make fleet-down && make up` before the next recorded demo.
 
 ## Next three tasks
 
@@ -42,6 +46,6 @@ Run the `session-brief` skill first. Do not start ledger, dashboards, JWT, or S3
 
 Compose is `deploy/compose/docker-compose.yml`. After `make up`, `make export-ca` (`DSP_CA_FILE=.local/ca.crt`). Host Postgres is on **5433**. Gateway `DEMO_MODE=1` serves `/demo/`. Landing page is **not** on the gateway.
 
-If `fleet-seed` fails on an old volume: `make fleet-down && make up`. 32 MiB plaintext → 3 chunks; use 31 MiB for a 16/16 start on a probation fleet.
+If `fleet-seed` fails on an old volume: `make fleet-down && make up`. 32 MiB plaintext → 3 chunks; use 31 MiB for a 16/16 start on a probation fleet. Do not `docker compose start` the whole stack to revive killed agents — that waits on `fleet-seed` forever; use `docker start dsp-agentN-1`.
 
-Vault: `knowledge-base/Roadmap/Milestones.md`, `Maps/Map of Roadmap.md`, `Home.md`, `Flows/Repair Loop.md`, `Control Plane/Repair Service.md`, `Security/Self-Healing.md`.
+Vault: `knowledge-base/Roadmap/Milestones.md`, `Maps/Map of Roadmap.md`, `Home.md`, `Flows/Repair Loop.md`, `Data Plane/Node Agent.md`, `Technology/gRPC.md`, `Maps/Map of Security.md`.

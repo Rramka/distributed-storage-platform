@@ -1,8 +1,8 @@
 ---
 name: chaos-scenario
 description: >-
-  Runs simulated-fleet chaos verbs (kill, drain, partition, corrupt, throttle,
-  flap) against local Compose agents and reports pass/fail with repair
+  Runs simulated-fleet chaos verbs (kill, drain, partition, corrupt, flap)
+  against local Compose agents and reports pass/fail with repair
   latency. Use when running M4 tests, chaos, self-healing demos, or when
   the user says kill nodes, corrupt fragments, or soak.
 ---
@@ -16,14 +16,13 @@ Primary test tool from `docs/10-mvp-roadmap.md`. Operate on the Compose fleet, n
 ```text
 kill <n> nodes           # SIGKILL
 drain <node>             # graceful retirement
-partition <nodes>        # stubbed (needs iptables)
+partition [--region r]   # docker compose pause (cgroup freeze); floor ≥ 13/16
 corrupt <agent> [--frac] # flip 1 byte / 4096-byte block in .frag files
-throttle <node> <mbps>   # stubbed (needs tc)
 flap <node> <period>     # kill then docker start
-soak [--duration 2h]     # randomized kill/flap/corrupt, max 6 down
+soak [--duration 2h]     # randomized kill/flap/corrupt/partition, max 6 down
 ```
 
-Drive with `go run ./cmd/harness <verb>` or `make chaos-m4` / `make soak`. `partition` and `throttle` remain unimplemented.
+Drive with `go run ./cmd/harness <verb>` or `make chaos-m4` / `make chaos-partition` / `make soak`. `throttle` is retired (neutral `bandwidth_factor`).
 
 ## Default M4 scenario
 
@@ -33,6 +32,10 @@ Drive with `go run ./cmd/harness <verb>` or `make chaos-m4` / `make soak`. `part
 4. Immediately `dsp get`; bytes must match. Download must not wait for repair.
 5. Watch repair until every chunk is 16/16 healthy. Record latency.
 6. `dsp get` again. Pass only if both downloads match and repair finished.
+
+## Regional partition
+
+`make chaos-partition` (or `harness partition --region eu-west --for 8m --heal`) freezes one region's agents. Every chunk must stay ≥ 13 healthy while they are paused. Unpause always runs, including on SIGINT. After `--heal`, flap re-validation must leave invariants clean.
 
 ## Report shape
 

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"io"
 	"testing"
+	"testing/quick"
 )
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {
@@ -43,6 +44,40 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 				t.Fatalf("mismatch len %d vs %d", out.Len(), n)
 			}
 		})
+	}
+}
+
+func TestPropertyEncryptDecryptIdentity(t *testing.T) {
+	t.Parallel()
+	fk, err := GenerateFileKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := func(n uint16) bool {
+		size := DefaultChunk - 32 + int(n)%64
+		if n&1 == 1 {
+			size = DefaultChunk + int(n)%64
+		}
+		if size < 0 {
+			size = DefaultChunk
+		}
+		plain := make([]byte, size)
+		for i := range plain {
+			plain[i] = byte(n) ^ byte(i)
+		}
+		var cipherBuf bytes.Buffer
+		prefix, _, _, _, err := Encrypt(&cipherBuf, bytes.NewReader(plain), fk)
+		if err != nil {
+			return false
+		}
+		var out bytes.Buffer
+		if err := Decrypt(&out, bytes.NewReader(cipherBuf.Bytes()), fk, prefix); err != nil {
+			return false
+		}
+		return bytes.Equal(out.Bytes(), plain)
+	}
+	if err := quick.Check(fn, &quick.Config{MaxCount: 4}); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -23,7 +23,7 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
-        run: go test ./... -count=1
+        run: go test ./... -short -count=1
 
   invariants:
     runs-on: ubuntu-latest
@@ -64,4 +64,4 @@ jobs:
       - name: Apply migrations
         run: ./scripts/apply-migrations.sh "$POSTGRES_URL"
       - name: Invariant and red-team tests
-        run: go test ./internal/store/... ./internal/invariants/... ./internal/gateway/... ./internal/healthmon/... -count=1
+        run: go test ./... -count=1

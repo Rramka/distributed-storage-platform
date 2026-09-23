@@ -24,7 +24,7 @@ func TestSoakPickVerbDistribution(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		seen[soakPickVerb(rng)]++
 	}
-	for _, v := range []string{"kill", "flap", "corrupt"} {
+	for _, v := range []string{"kill", "flap", "corrupt", "partition"} {
 		if seen[v] == 0 {
 			t.Fatalf("never picked %s", v)
 		}
@@ -35,10 +35,11 @@ func TestSoakPickAgentSkipsDown(t *testing.T) {
 	t.Parallel()
 	rng := rand.New(rand.NewSource(2))
 	down := map[string]bool{"agent1": true, "agent2": true}
+	paused := map[string]bool{"agent3": true}
 	for i := 0; i < 50; i++ {
-		got := soakPickAgent(rng, down, "kill")
-		if down[got] {
-			t.Fatalf("picked down agent %s", got)
+		got := soakPickAgent(rng, down, paused)
+		if down[got] || paused[got] {
+			t.Fatalf("picked unavailable agent %s", got)
 		}
 	}
 }

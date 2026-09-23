@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
-.PHONY: up down ps logs test test-short vet fmt migrate migrate-url build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4 demo invariants soak
+.PHONY: up down ps logs test test-short vet fmt migrate migrate-url build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4 chaos-partition demo invariants soak
 
 up:
 	$(COMPOSE) up -d --wait postgres
@@ -25,6 +25,9 @@ fleet-kill6:
 
 chaos-m4:
 	go run ./cmd/harness m4
+
+chaos-partition:
+	go run ./cmd/harness partition --region $${REGION:-eu-west} --for $${DURATION:-8m} --heal
 
 demo:
 	go run ./cmd/harness demo

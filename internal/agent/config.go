@@ -1,5 +1,5 @@
 // Package agent is the storage node: chunk store, fragment API, registration, heartbeats.
-// docs/05-node-agent.md. Scrub, GC, bandwidth limiter, and self-update are deferred to M4.
+// docs/05-node-agent.md. GC, bandwidth limiter, and self-update remain deferred past M4.
 package agent
 
 import (
