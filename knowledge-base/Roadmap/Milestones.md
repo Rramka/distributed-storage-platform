@@ -10,7 +10,7 @@ aliases:
 
 Every milestone ends with something that **runs end-to-end**.
 
-**Active plan:** [[Map of Roadmap]] solo builder track — ship M0–M4 as the raise demo. M5–M6 are specified but deferred.
+**Active plan:** [[Map of Roadmap]] solo builder track — M0–M4 shipped as the raise demo. **M5 (ledger) is active.** M6 remains deferred.
 
 | ID | Slice | Exit | Solo track |
 |---|---|---|---|
@@ -23,7 +23,7 @@ Every milestone ends with something that **runs end-to-end**.
 | **W12** Demo + raise | `make demo` metrics, deck outline, data room, static waitlist (`web/landing/`) | Kill 6 of 16, download during failure, 16/16, dump decrypts nothing | shipped |
 | **W13** Chaos + CI | `harness partition` (cgroup freeze), `throttle` retired, honest CI, property/fuzz tests | Region cut stays ≥ 13/16; `go test ./...` against Postgres | shipped |
 | **W14** Harden claim | TLS registration, atomic codes, DELETE nonce, demo-ready, docs=code | One code → one node; `dsp get` during `chaos-m4` | shipped |
-| **M5** Ledger | Usage stream, double-entry, `R`, [[Quota]] | Accelerated "month" produces balanced books | deferred |
+| **M5** Ledger | Usage stream, double-entry, `R`, `GET /storage` / `GET /earnings` | Accelerated "month" produces balanced books | **active** |
 | **M6** Dashboards + harden | [[Web Dashboard]], [[Admin Dashboard]], installers, chaos pass | Full [[MVP Scope]], demoable by a non-developer | deferred |
 
 M4 is the core claim — heaviest test investment. Chaos harness: kill, drain, partition (cgroup freeze), corrupt, flap. `throttle` is retired.

@@ -10,7 +10,7 @@ description: >-
 
 # Spec to service
 
-Turn one spec section into a thin but runnable vertical. Do not implement deferred solo-track services (`ledger`, `admind`).
+Turn one spec section into a thin but runnable vertical. Do not implement deferred solo-track services (`admind`).
 
 ## Inputs
 
@@ -25,6 +25,7 @@ The user names a service and a spec file (default mapping):
 | repair | `docs/06-scheduler-and-repair.md` |
 | agent | `docs/05-node-agent.md` |
 | dsp | `docs/04-storage-pipeline.md`, `docs/08-api.md` |
+| ledger | `docs/09-billing-ledger.md` |
 
 ## Checklist
 
@@ -46,5 +47,5 @@ Copy and tick:
 - Implement the **thinnest** slice that meets the milestone exit, not the whole spec.
 - Shared crypto lives in `internal/pipeline`, `internal/tickets`, `internal/receipts`, `internal/ca` — do not duplicate it inside a service.
 - Health endpoint JSON: `{"status":"ok","service":"<name>"}`.
-- Compose service names match binary names. HTTP ports: gateway 8080, metadata 8081, scheduler 8082, healthmon 8083, repair 8084, agent 9000+.
+- Compose service names match binary names. HTTP ports: gateway 8080, metadata 8081, scheduler 8082, healthmon 8083, repair 8084, ledger 8085, agent 9000+.
 - After scaffolding, run `go build ./...` and `go test ./... -short`.

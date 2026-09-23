@@ -8,7 +8,7 @@ aliases:
 
 # Quota
 
-Customers have a credit floor (e.g. free-tier allowance in Phase 1). At the floor:
+Specified for Phase 1, **deferred to M5b**. Customers will have a credit floor. At the floor:
 
 - **Uploads blocked** (`403 quota_exceeded`)
 - **Downloads and [[File Deletion]] remain available** — data is never held hostage over billing

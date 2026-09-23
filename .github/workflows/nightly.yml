@@ -16,6 +16,14 @@ jobs:
           go-version: "1.26.x"
       - name: Bring up Compose fleet
         run: make up
+      - name: Control-plane health
+        run: |
+          curl -fsS http://127.0.0.1:8080/healthz
+          curl -fsS http://127.0.0.1:8081/healthz
+          curl -fsS http://127.0.0.1:8082/healthz
+          curl -fsS http://127.0.0.1:8083/healthz
+          curl -fsS http://127.0.0.1:8084/healthz
+          curl -fsS http://127.0.0.1:8085/healthz
       - name: Seed fleet
         run: make fleet-seed
       - name: Put fixture

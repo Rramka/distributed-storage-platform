@@ -9,17 +9,17 @@ import (
 
 // NodeStats is one hourly rollup row (node_stats).
 type NodeStats struct {
-	NodeID        uuid.UUID
-	WindowStart   time.Time
-	UptimeRatio   float32
-	AvgLatencyMS  float32
-	FreeBytes     int64
-	CPULoad       float32
-	MemUsedRatio  float32
-	AuditsPassed  int
-	AuditsFailed  int
-	BytesServed   int64
-	BytesIngested int64
+	NodeID        uuid.UUID `json:"node_id"`
+	WindowStart   time.Time `json:"window_start"`
+	UptimeRatio   float32   `json:"uptime_ratio"`
+	AvgLatencyMS  float32   `json:"avg_latency_ms"`
+	FreeBytes     int64     `json:"free_bytes"`
+	CPULoad       float32   `json:"cpu_load"`
+	MemUsedRatio  float32   `json:"mem_used_ratio"`
+	AuditsPassed  int       `json:"audits_passed"`
+	AuditsFailed  int       `json:"audits_failed"`
+	BytesServed   int64     `json:"bytes_served"`
+	BytesIngested int64     `json:"bytes_ingested"`
 }
 
 // UpsertNodeStats writes non-audit fields for the hour; audit counters accumulate.
@@ -40,6 +40,71 @@ func (s *Store) UpsertNodeStats(ctx context.Context, row NodeStats) error {
 		return mapQueryErr("store.upsertNodeStats", err)
 	}
 	return nil
+}
+
+// BumpNodeBytes increments ingest and/or egress counters for the current hour.
+func (s *Store) BumpNodeBytes(ctx context.Context, nodeID uuid.UUID, ingested, served int64) error {
+	if ingested == 0 && served == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO node_stats (
+			node_id, window_start, uptime_ratio, bytes_ingested, bytes_served
+		) VALUES ($1, date_trunc('hour', now()), 0, $2, $3)
+		ON CONFLICT (node_id, window_start) DO UPDATE SET
+			bytes_ingested = node_stats.bytes_ingested + EXCLUDED.bytes_ingested,
+			bytes_served = node_stats.bytes_served + EXCLUDED.bytes_served
+	`, nodeID, ingested, served)
+	if err != nil {
+		return mapQueryErr("store.bumpNodeBytes", err)
+	}
+	return nil
+}
+
+// NodeReliability is the 30-day rolling uptime and audit pass rate.
+func (s *Store) NodeReliability(ctx context.Context, nodeID uuid.UUID) (uptime30d, auditPass30d float32, err error) {
+	err = s.pool.QueryRow(ctx, `
+		SELECT
+			COALESCE(AVG(uptime_ratio), 0),
+			CASE WHEN COALESCE(SUM(audits_passed + audits_failed), 0) = 0 THEN 1
+			     ELSE SUM(audits_passed)::real / SUM(audits_passed + audits_failed)::real
+			END
+		FROM node_stats
+		WHERE node_id = $1 AND window_start > now() - interval '30 days'
+	`, nodeID).Scan(&uptime30d, &auditPass30d)
+	if err != nil {
+		return 0, 0, mapQueryErr("store.nodeReliability", err)
+	}
+	return uptime30d, auditPass30d, nil
+}
+
+// ListNodeStats returns hourly rollups for a node in [from, to).
+func (s *Store) ListNodeStats(ctx context.Context, nodeID uuid.UUID, from, to time.Time) ([]NodeStats, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT node_id, window_start, uptime_ratio,
+			COALESCE(avg_latency_ms, 0), COALESCE(free_bytes, 0),
+			COALESCE(cpu_load, 0), COALESCE(mem_used_ratio, 0),
+			audits_passed, audits_failed, bytes_served, bytes_ingested
+		FROM node_stats
+		WHERE node_id = $1 AND window_start >= $2 AND window_start < $3
+		ORDER BY window_start
+	`, nodeID, from, to)
+	if err != nil {
+		return nil, mapQueryErr("store.listNodeStats", err)
+	}
+	defer rows.Close()
+	var out []NodeStats
+	for rows.Next() {
+		var r NodeStats
+		if err := rows.Scan(
+			&r.NodeID, &r.WindowStart, &r.UptimeRatio, &r.AvgLatencyMS, &r.FreeBytes,
+			&r.CPULoad, &r.MemUsedRatio, &r.AuditsPassed, &r.AuditsFailed, &r.BytesServed, &r.BytesIngested,
+		); err != nil {
+			return nil, mapQueryErr("store.listNodeStats", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // BumpNodeAudit increments the current hour's pass or fail counter.

@@ -16,7 +16,7 @@ From `docs/10-mvp-roadmap.md` continuously measured invariants.
 
 1. **Durability.** Every `file_versions.status = committed` chunk has ≥ 12 `fragment_placements` with `status = stored` on nodes that are not `offline`/`quarantined`. Alert if any chunk has < 13.
 2. **Zero knowledge.** Grep agent `data_dir` and control-plane stores for plaintext fixtures and unwrapped keys. Platform DB dump must not decrypt the fixture file (red-team). Master Key never appears in logs or Postgres.
-3. **Ledger.** `SUM(amount) GROUP BY txn_id` is 0 for every transaction. **Skip on the solo track until M5.**
+3. **Ledger.** `SUM(amount) GROUP BY txn_id` is 0 for every transaction. Empty books pass.
 4. **Placement constraints.** No two fragments of the same chunk share a node; region/ASN/owner caps from `docs/06-scheduler-and-repair.md` hold after repair.
 
 ## How to run
@@ -31,7 +31,7 @@ From `docs/10-mvp-roadmap.md` continuously measured invariants.
 ## Invariants
 - [ ] ≥ 12 healthy placements (min observed: _)
 - [ ] no plaintext / unwrapped key
-- [ ] ledger balanced (or skipped — M5 deferred)
+- [ ] ledger balanced
 - [ ] placement constraints
 ```
 

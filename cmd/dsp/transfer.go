@@ -319,6 +319,7 @@ func cmdGet(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 	h := sha256.New()
 	var cipherBuf bytes.Buffer
 	w := io.MultiWriter(&cipherBuf, h)
+	var egress []string
 	for _, ch := range dl.Chunks {
 		frags := make([]downloadFrag, 0, len(ch.Fragments))
 		for _, fr := range ch.Fragments {
@@ -331,10 +332,11 @@ func cmdGet(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 				Ticket:     fr.Ticket,
 			})
 		}
-		chunk, err := fetchChunk(caCert, ch.Seq, ch.SHA256, ch.SizeBytes, frags)
+		chunk, recs, err := fetchChunk(caCert, ch.Seq, ch.SHA256, ch.SizeBytes, frags)
 		if err != nil {
 			return err
 		}
+		egress = append(egress, recs...)
 		if _, err := w.Write(chunk); err != nil {
 			return err
 		}
@@ -358,6 +360,9 @@ func cmdGet(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 	defer out.Close()
 	if err := pipeline.Decrypt(out, bytes.NewReader(cipherBuf.Bytes()), fk, em.NoncePrefix); err != nil {
 		return err
+	}
+	if len(egress) > 0 {
+		_, _, _ = c.do(http.MethodPost, "/v1/download/"+fileID.String()+"/report", map[string]any{"receipts": egress}, false)
 	}
 	fmt.Fprintln(stdout, dest)
 	return nil
@@ -418,15 +423,16 @@ type downloadFrag struct {
 	Ticket     string
 }
 
-func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes int, frags []downloadFrag) ([]byte, error) {
+func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes int, frags []downloadFrag) ([]byte, []string, error) {
 	if len(frags) == 0 {
-		return nil, fmt.Errorf("no fragments for chunk %d", seq)
+		return nil, nil, fmt.Errorf("no fragments for chunk %d", seq)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	type hit struct {
 		idx  int16
 		data []byte
+		rec  string
 	}
 	hits := make(chan hit, len(frags))
 	var wg sync.WaitGroup
@@ -435,7 +441,7 @@ func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes in
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			data, err := getFragment(ctx, caCert, fr.Endpoint, fr.NodeID, fr.FragmentID, fr.Ticket)
+			data, rec, err := getFragment(ctx, caCert, fr.Endpoint, fr.NodeID, fr.FragmentID, fr.Ticket)
 			if err != nil {
 				return
 			}
@@ -445,7 +451,7 @@ func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes in
 				return
 			}
 			select {
-			case hits <- hit{idx: fr.ShardIndex, data: data}:
+			case hits <- hit{idx: fr.ShardIndex, data: data, rec: rec}:
 			case <-ctx.Done():
 			}
 		}()
@@ -456,11 +462,15 @@ func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes in
 	}()
 	shards := make([][]byte, pipeline.ECTotal)
 	got := 0
+	var recs []string
 	for h := range hits {
 		if int(h.idx) < 0 || int(h.idx) >= pipeline.ECTotal || shards[h.idx] != nil {
 			continue
 		}
 		shards[h.idx] = h.data
+		if h.rec != "" {
+			recs = append(recs, h.rec)
+		}
 		got++
 		if got >= pipeline.ECData {
 			cancel()
@@ -468,18 +478,18 @@ func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes in
 		}
 	}
 	if got < pipeline.ECData {
-		return nil, fmt.Errorf("chunk %d: only %d of %d shards", seq, got, pipeline.ECData)
+		return nil, nil, fmt.Errorf("chunk %d: only %d of %d shards", seq, got, pipeline.ECData)
 	}
 	chunk, err := pipeline.ReconstructChunk(shards, sizeBytes)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sum := sha256.Sum256(chunk)
 	want, err := hex.DecodeString(chunkSHA)
 	if err != nil || !bytes.Equal(sum[:], want) {
-		return nil, fmt.Errorf("chunk %d hash mismatch", seq)
+		return nil, nil, fmt.Errorf("chunk %d hash mismatch", seq)
 	}
-	return chunk, nil
+	return chunk, recs, nil
 }
 
 func putFragment(ctx context.Context, caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string, data []byte) (string, error) {
@@ -518,10 +528,10 @@ func putFragment(ctx context.Context, caCert *x509.Certificate, endpoint, nodeID
 	return out.Receipt, nil
 }
 
-func getFragment(ctx context.Context, caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string) ([]byte, error) {
+func getFragment(ctx context.Context, caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string) ([]byte, string, error) {
 	nid, err := uuid.Parse(nodeID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	host, _, err := net.SplitHostPort(endpoint)
 	if err != nil {
@@ -533,20 +543,20 @@ func getFragment(ctx context.Context, caCert *x509.Certificate, endpoint, nodeID
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+endpoint+"/fragments/"+fragID, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("X-DSP-Ticket", ticket)
 	resp, err := cl.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get fragment: http %d %s", resp.StatusCode, raw)
+		return nil, "", fmt.Errorf("get fragment: http %d %s", resp.StatusCode, raw)
 	}
-	return raw, nil
+	return raw, resp.Header.Get("X-DSP-Receipt"), nil
 }

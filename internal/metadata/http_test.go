@@ -181,6 +181,10 @@ func (m *mem) CommitUpload(_ context.Context, _, _ uuid.UUID, _ []string) (store
 func (m *mem) PlanDownload(_ context.Context, _, _ uuid.UUID) (DownloadResult, error) {
 	return DownloadResult{}, ErrInvalid
 }
+func (m *mem) ReportDownload(_ context.Context, _, _ uuid.UUID, _ []string) error { return nil }
+func (m *mem) ListNodeStats(_ context.Context, _, _ uuid.UUID, _, _ time.Time) ([]store.NodeStats, error) {
+	return nil, nil
+}
 
 func TestInternalHTTPRegisterAndLookup(t *testing.T) {
 	t.Parallel()

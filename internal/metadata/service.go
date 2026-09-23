@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/auth"
+	"github.com/Rramka/distributed-storage-platform/internal/events"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/google/uuid"
 )
@@ -46,11 +47,14 @@ type Service interface {
 	PlanUpload(ctx context.Context, userID uuid.UUID, m store.UploadManifest) (PlanResult, error)
 	CommitUpload(ctx context.Context, userID, uploadID uuid.UUID, receipts []string) (store.File, store.FileVersion, error)
 	PlanDownload(ctx context.Context, userID, fileID uuid.UUID) (DownloadResult, error)
+	ReportDownload(ctx context.Context, userID, fileID uuid.UUID, receipts []string) error
+	ListNodeStats(ctx context.Context, userID, nodeID uuid.UUID, from, to time.Time) ([]store.NodeStats, error)
 }
 
 // StoreService implements Service against Postgres.
 type StoreService struct {
 	Store      *store.Store
+	Bus        *events.Bus
 	IssueNode  func(csr []byte, nodeID uuid.UUID, endpoint string) (certPEM []byte, pub []byte, fp []byte, expires time.Time, err error)
 	SignTicket func(op string, fragmentID, nodeID uuid.UUID, sha []byte, maxBytes uint64) (string, time.Time, error)
 	Place      func(ctx context.Context, needs []PlaceNeed) ([]PlaceAssign, error)
@@ -168,6 +172,23 @@ func (s *StoreService) RenameFile(ctx context.Context, userID, fileID uuid.UUID,
 
 func (s *StoreService) DeleteFile(ctx context.Context, userID, fileID uuid.UUID) error {
 	return s.Store.SoftDeleteFile(ctx, userID, fileID)
+}
+
+func (s *StoreService) ListNodeStats(ctx context.Context, userID, nodeID uuid.UUID, from, to time.Time) ([]store.NodeStats, error) {
+	n, err := s.Store.NodeByID(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	if n.OwnerID != userID {
+		return nil, ErrForbidden
+	}
+	if from.IsZero() {
+		from = time.Now().UTC().Add(-24 * time.Hour)
+	}
+	if to.IsZero() {
+		to = time.Now().UTC()
+	}
+	return s.Store.ListNodeStats(ctx, nodeID, from, to)
 }
 
 func validEmail(email string) bool {

@@ -420,6 +420,50 @@ func Mount(mux *http.ServeMux, svc Service) {
 		}
 		writeJSON(w, http.StatusOK, res)
 	})
+
+	mux.HandleFunc("POST /internal/users/{userID}/download/{id}/report", func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := parseUser(w, r)
+		if !ok {
+			return
+		}
+		id, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		var req struct {
+			Receipts []string `json:"receipts"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		if writeErr(w, r, svc.ReportDownload(r.Context(), userID, id, req.Receipts)) {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	})
+
+	mux.HandleFunc("GET /internal/users/{userID}/nodes/{id}/stats", func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := parseUser(w, r)
+		if !ok {
+			return
+		}
+		id, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		from, _ := time.Parse(time.RFC3339, r.URL.Query().Get("from"))
+		to, _ := time.Parse(time.RFC3339, r.URL.Query().Get("to"))
+		rows, err := svc.ListNodeStats(r.Context(), userID, id, from, to)
+		if writeErr(w, r, err) {
+			return
+		}
+		if rows == nil {
+			rows = []store.NodeStats{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"stats": rows})
+	})
 }
 
 func parseUser(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {

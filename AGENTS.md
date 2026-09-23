@@ -9,7 +9,7 @@ This repo is built by **one person** with AI agents. Read this file, then [`STAT
 | Source | Role |
 |---|---|
 | [`docs/`](docs/) | Canonical spec. Code must implement what is written there. |
-| [`docs/10-mvp-roadmap.md`](docs/10-mvp-roadmap.md) § Solo builder track | Active scope: M0–M4 only. |
+| [`docs/10-mvp-roadmap.md`](docs/10-mvp-roadmap.md) § Solo builder track | Active scope: M0–M5. |
 | [`knowledge-base/`](knowledge-base/) | Navigable index of the same design (Obsidian). Update it when behavior changes (`kb-sync` skill). |
 | [`STATUS.md`](STATUS.md) | Where the last session left off. Update it before you stop. |
 
@@ -44,12 +44,12 @@ Health checks after `make up`:
 - scheduler `http://127.0.0.1:8082/healthz`
 - healthmon `http://127.0.0.1:8083/healthz`
 - repair `http://127.0.0.1:8084/healthz`
+- ledger `http://127.0.0.1:8085/healthz`
 
 ## Scope you must not expand
 
-Do **not** implement until the M4 durability demo is recorded:
+Do **not** implement until the M5 exit (balanced books) is recorded:
 
-- ledger / billing service
 - customer, provider, or admin dashboards (fleet visualizer is the only UI)
 - JWT / refresh tokens (API keys only)
 - agent installers / self-update
@@ -57,6 +57,7 @@ Do **not** implement until the M4 durability demo is recorded:
 - reputation beyond a scalar
 - S3 compatibility
 - real money movement
+- monthly statements and quota enforcement (M5b)
 
 ## Definition of done
 
@@ -64,7 +65,7 @@ A task is done only when all of these hold:
 
 1. `go build ./...` and `go test ./... -short` pass
 2. New behavior is covered by tests (table-driven; property-based for crypto/erasure/tickets)
-3. The four invariants in `docs/10-mvp-roadmap.md` are not violated (skip the ledger invariant until M5)
+3. The four invariants in `docs/10-mvp-roadmap.md` are not violated (ledger invariant 3 is in force as of M5)
 4. Spec and `knowledge-base/` notes match the code if behavior changed
 5. `STATUS.md` lists what shipped and the next three tasks
 

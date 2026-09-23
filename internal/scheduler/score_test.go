@@ -13,6 +13,17 @@ func TestNodeScoreReputationMonotonic(t *testing.T) {
 	}
 }
 
+func TestNodeScoreUptimeMonotonic(t *testing.T) {
+	t.Parallel()
+	low := fakeNode(0, 0, "us-east", 64501)
+	high := low
+	low.UptimeRatio = 0.2
+	high.UptimeRatio = 0.9
+	if nodeScore(high) <= nodeScore(low) {
+		t.Fatalf("high %v low %v", nodeScore(high), nodeScore(low))
+	}
+}
+
 func TestNodeScoreNeutralBandwidth(t *testing.T) {
 	t.Parallel()
 	n := fakeNode(0, 0, "us-east", 64501)

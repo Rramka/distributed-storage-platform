@@ -223,6 +223,10 @@ func (m *fakeMeta) CommitUpload(_ context.Context, _, _ uuid.UUID, _ []string) (
 func (m *fakeMeta) PlanDownload(_ context.Context, _, _ uuid.UUID) (metadata.DownloadResult, error) {
 	return metadata.DownloadResult{}, metadata.ErrNotFound
 }
+func (m *fakeMeta) ReportDownload(_ context.Context, _, _ uuid.UUID, _ []string) error { return nil }
+func (m *fakeMeta) ListNodeStats(_ context.Context, _, _ uuid.UUID, _, _ time.Time) ([]store.NodeStats, error) {
+	return nil, nil
+}
 
 func testServer(t *testing.T, meta metadata.Service) http.Handler {
 	t.Helper()

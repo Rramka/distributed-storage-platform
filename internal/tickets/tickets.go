@@ -230,6 +230,15 @@ func encodeWire(payload, sig []byte) string {
 	return base64.RawURLEncoding.EncodeToString(payload) + "." + base64.RawURLEncoding.EncodeToString(sig)
 }
 
+// Decode unpacks a wire ticket without verifying the signature.
+func Decode(wire string) (Ticket, error) {
+	payload, _, err := decodeWire(wire)
+	if err != nil {
+		return Ticket{}, err
+	}
+	return decode(payload)
+}
+
 func decodeWire(wire string) (payload, sig []byte, err error) {
 	i := strings.IndexByte(wire, '.')
 	if i <= 0 || i == len(wire)-1 {

@@ -79,6 +79,7 @@ func main() {
 		OfflineAfter: offline,
 	}
 	go mon.Run(ctx)
+	go healthmon.RunRollupBus(ctx, st, rdb, bus)
 	if mu := os.Getenv("METADATA_URL"); mu != "" {
 		tick, interval := healthmon.ChallengeDurationsFromEnv()
 		ch := &healthmon.Challenger{
@@ -90,7 +91,6 @@ func main() {
 			Interval: interval,
 		}
 		go ch.Run(ctx)
-		go healthmon.RunRollup(ctx, st, rdb)
 	}
 	addr := os.Getenv("HEARTBEAT_ADDR")
 	if addr == "" {

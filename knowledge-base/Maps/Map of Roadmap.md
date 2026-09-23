@@ -11,13 +11,13 @@ Build rule: **every milestone ends with something that runs end-to-end**. Healin
 
 ## Solo builder track (active)
 
-One person, ~10–15 hours/week, AI-assisted. The investable artifact is M0–M4: encrypted upload, kill 6 of 16 nodes, download still works, fleet heals, platform DB decrypts nothing.
+One person, ~10–15 hours/week, AI-assisted. The investable artifact was M0–M4. **M5 (meters + internal ledger) is the active engineering track.**
 
-Deferred until after that demo: [[Ledger Service]], dashboards, JWT, installers, rebalancing, reputation beyond a scalar, S3. See [[Non-goals]] and `docs/10-mvp-roadmap.md`.
+Deferred: dashboards, JWT, installers, rebalancing, reputation beyond a scalar, S3, real money, monthly statements and quota (M5b). See [[Non-goals]] and `docs/10-mvp-roadmap.md`.
 
 ## Phase 1 slice
 
-[[MVP Scope]] is a complete vertical: register, encrypt, place, retrieve, audit, repair. Ledger (no real money) and admin view are specified but deferred on the solo track.
+[[MVP Scope]] is a complete vertical: register, encrypt, place, retrieve, audit, repair, meter, ledger. Admin dashboards remain deferred.
 
 Explicitly out: compute, S3 API, real payments, sync clients, provider-set pricing. See [[Non-goals]].
 
@@ -34,6 +34,8 @@ W12: `make demo` writes `business/updates/demo-metrics-YYYY-MM-DD.json`. Static 
 W13: `harness partition` (`docker compose pause`, not iptables) with a ≥ 13/16 floor while a region is cut. `throttle` retired (neutral `bandwidth_factor`). CI `test` job is `-short`; `invariants` job runs `go test ./...` against Postgres. Nightly runs partition + a 20-minute soak.
 
 W14: node registration is server-authenticated TLS (`:8444`); one registration code yields one node row; DELETE tickets are single-use; `make demo-ready` + `harness m4` assert `dsp get` while six holders are down. Docs match HTTP/JSON + binary tickets.
+
+W15–W17 (M5): honest meters (`uptime_ratio` from heartbeat counts, PUT ingest, signed GET egress receipts, deletion lifecycle), `USAGE_EVENTS` JetStream, `cmd/ledger` on `:8085`, invariant 3 un-skipped, accelerated-month balanced books.
 
 ## After MVP
 

@@ -226,16 +226,16 @@ CREATE TABLE node_stats (
 );
 ```
 
-Hourly rollups feed reputation scoring and provider earnings. Raw heartbeats are not persisted — they are aggregated in memory by the Health Monitor and flushed as rollups.
+Hourly rollups feed reputation scoring and provider earnings. `uptime_ratio` is `min(1, heartbeats_received / expected)` for that UTC hour (expected = 360 at a 10 s heartbeat). Nodes that miss the whole hour record 0, not a skipped row. `bytes_ingested` increments from verified PUT receipts at commit; `bytes_served` increments from node-signed GET receipts reported by the client (`POST /download/{id}/report`).
 
 ## Ledger
 
-Double-entry design; full semantics in [09-billing-ledger.md](09-billing-ledger.md).
+Double-entry design; full semantics in [09-billing-ledger.md](09-billing-ledger.md). The Ledger Service is the sole writer. A deferred constraint trigger enforces `SUM(amount) = 0` per `txn_id` at commit.
 
 ```sql
 CREATE TABLE ledger_accounts (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_type      TEXT NOT NULL,              -- user | node | platform
+    owner_type      TEXT NOT NULL,              -- customer | provider | platform
     owner_id        UUID,                       -- NULL for platform accounts
     kind            TEXT NOT NULL,              -- customer_balance | provider_earnings | platform_revenue
     currency        TEXT NOT NULL DEFAULT 'CRD',-- internal credits in Phase 1
@@ -253,7 +253,35 @@ CREATE TABLE ledger_entries (
 );
 
 CREATE INDEX ledger_by_account ON ledger_entries (account_id, created_at);
--- Invariant enforced by the Ledger service: SUM(amount) over each txn_id = 0.
+CREATE INDEX ledger_by_txn ON ledger_entries (txn_id);
+
+CREATE TABLE usage_events (
+    id              TEXT PRIMARY KEY,           -- deterministic: usage:{kind}:{subject}:{window}
+    kind            TEXT NOT NULL,              -- storage | egress | uptime
+    subject_id      UUID,
+    window_start    TIMESTAMPTZ,
+    payload         JSONB,
+    consumed_at     TIMESTAMPTZ
+);
+
+CREATE TABLE download_tickets (
+    nonce           BYTEA PRIMARY KEY,
+    file_id         UUID NOT NULL REFERENCES files(id),
+    fragment_id     UUID NOT NULL REFERENCES fragments(id),
+    node_id         UUID NOT NULL REFERENCES nodes(id),
+    size_bytes      BIGINT NOT NULL,
+    expires_at      TIMESTAMPTZ NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE download_receipts (
+    nonce           BYTEA PRIMARY KEY,
+    file_id         UUID NOT NULL REFERENCES files(id),
+    fragment_id     UUID NOT NULL REFERENCES fragments(id),
+    node_id         UUID NOT NULL REFERENCES nodes(id),
+    bytes           BIGINT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
 ## Audit log
@@ -281,4 +309,4 @@ Every security-relevant action — logins, key issuance, node registration, quar
 
 **Node failure:** Health Monitor flips `nodes.status` to `offline` → Repair Service marks that node's placements `lost` → for each affected fragment's chunk, if healthy placements < repair threshold, reconstruction is queued → new placements inserted as `pending`, flipped to `stored` on receipt.
 
-**File deletion:** `files.deleted_at` set → placements flip to `expiring` → Node Agents learn of expiry on next sync and delete local fragments → nodes confirm, placements flip to `deleted` → janitor hard-deletes metadata after the retention window.
+**File deletion:** `files.deleted_at` set → versions flip to `expired` → placements flip to `expiring` in the same transaction (billing stops immediately) → a reaper in the repair process issues DELETE tickets → agents remove fragments → placements flip to `deleted`.

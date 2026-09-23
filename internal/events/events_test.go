@@ -1,7 +1,11 @@
 package events
 
 import (
+	"fmt"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestPrioritySubject(t *testing.T) {
@@ -27,6 +31,20 @@ func TestPrioritySubject(t *testing.T) {
 				t.Fatalf("healthy %d: got %q want %q", tc.healthy, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestUsageMsgID(t *testing.T) {
+	t.Parallel()
+	id := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	window := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	got := UsageMsgID(UsageStorage, id, window)
+	want := fmt.Sprintf("usage:storage:%s:%d", id, time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC).Unix())
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	if UsageMsgID(UsageStorage, id, window.Add(30*time.Minute)) != got {
+		t.Fatal("same hour must share msg id")
 	}
 }
 

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	"testing/quick"
 	"time"
 
+	"github.com/Rramka/distributed-storage-platform/internal/receipts"
 	"github.com/Rramka/distributed-storage-platform/internal/tickets"
 	"github.com/google/uuid"
 )
@@ -34,8 +36,12 @@ func testAgent(t *testing.T) (*Agent, *tickets.Signer, uuid.UUID) {
 		t.Fatal(err)
 	}
 	nodeID := uuid.New()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	a := &Agent{
-		id:      identity{ID: nodeID},
+		id:      identity{ID: nodeID, Priv: priv},
 		store:   st,
 		tickets: tickets.NewVerifier(signer.PublicKey()),
 	}
@@ -224,6 +230,48 @@ func TestDeleteTicketReplay(t *testing.T) {
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusForbidden {
 		t.Fatalf("replay %d", resp2.StatusCode)
+	}
+}
+
+func TestGetReturnsEgressReceipt(t *testing.T) {
+	t.Parallel()
+	a, signer, nodeID := testAgent(t)
+	payload := []byte("get-receipt-bytes")
+	frag := putFrag(t, a, payload)
+	sum := sha256.Sum256(payload)
+	tk, err := signer.Sign(tickets.Ticket{
+		Op:         tickets.OpGet,
+		FragmentID: frag,
+		NodeID:     nodeID,
+		SHA256:     sum[:],
+		MaxBytes:   uint64(len(payload)),
+		ExpiresAt:  time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(a.Handler())
+	t.Cleanup(srv.Close)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/fragments/"+frag.String(), nil)
+	req.Header.Set("X-DSP-Ticket", tk.Raw)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get %d", resp.StatusCode)
+	}
+	rec := resp.Header.Get("X-DSP-Receipt")
+	if rec == "" {
+		t.Fatal("missing egress receipt")
+	}
+	got, err := receipts.Parse(rec, a.id.Priv.Public().(ed25519.PublicKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Size != uint64(len(payload)) || len(got.Nonce) != 16 {
+		t.Fatalf("%+v", got)
 	}
 }
 

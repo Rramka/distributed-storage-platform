@@ -19,6 +19,8 @@ For each affected [[Chunk]], if healthy [[Fragment Placement]] count is below 16
 
 The worker **never holds `TICKET_SIGNING_SEED`** and **never decrypts**. [[Zero Knowledge]] survives this path.
 
+The same binary runs the deletion lifecycle reaper: after [[File Deletion]] marks placements `expiring`, it issues DELETE tickets, calls the [[Node Agent]] `DELETE /fragments/{id}`, and sets `deleted`. Billing GB-hours stop at `expiring`.
+
 Workers are stateless NATS consumers. Priority is three subjects: `repair.critical` (≤10 healthy), `repair.high` (11), `repair.normal` (12–15). Throttles: `REPAIR_MAX_CONCURRENT`, `REPAIR_BUDGET_MBPS`.
 
 **Flap:** on `node.online`, a [[Storage Challenge]] (or a hash-GET that seeds a new challenge set) of that node's `lost` placements restores them or marks them `expiring` if reconstructed elsewhere.

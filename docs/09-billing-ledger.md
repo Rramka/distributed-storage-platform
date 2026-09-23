@@ -93,9 +93,9 @@ Anti-gaming notes: egress earnings are paid only for **ticketed** transfers reco
 
 ## Billing cycle
 
-- **Accrual:** hourly jobs post storage accruals from the placement map and drain the usage stream continuously. Everything is visible in near-real-time via `GET /storage` (customers) and `GET /earnings` (providers) ([08-api.md](08-api.md)).
-- **Monthly statement:** on cycle close, a statement job snapshots per-account totals into an immutable statement record (itself a ledger transaction moving accrued amounts into a `statement` bucket). Statements are what future settlement will act on.
-- **Quotas:** customers have a credit floor (configurable; e.g. free-tier allowance in Phase 1). At the floor, uploads are blocked (`403 quota_exceeded`) while downloads and deletions remain available — customers can always retrieve or remove their data; data is never held hostage over billing.
+- **Accrual:** hourly jobs post storage accruals from the placement map and drain the `USAGE_EVENTS` stream continuously. Everything is visible in near-real-time via `GET /storage` (customers) and `GET /earnings` (providers) ([08-api.md](08-api.md)). Amounts are integer µCRD. Reliability `R` is applied as integer basis points.
+- **Monthly statement:** M5b. On cycle close, a statement job snapshots per-account totals into an immutable statement record.
+- **Quotas:** M5b. Customers will have a credit floor; at the floor, uploads are blocked (`403 quota_exceeded`) while downloads and deletions remain available.
 
 ## What settlement will add later (explicitly out of scope now)
 

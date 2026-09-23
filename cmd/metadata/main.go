@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/Rramka/distributed-storage-platform/internal/ca"
+	"github.com/Rramka/distributed-storage-platform/internal/events"
 	"github.com/Rramka/distributed-storage-platform/internal/httpserver"
 	"github.com/Rramka/distributed-storage-platform/internal/metadata"
 	"github.com/Rramka/distributed-storage-platform/internal/scheduler"
@@ -29,6 +30,15 @@ func main() {
 	defer st.Close()
 
 	svc := &metadata.StoreService{Store: st}
+	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
+		bus, err := events.Connect(context.Background(), natsURL)
+		if err != nil {
+			slog.Error("metadata nats", "err", err)
+			os.Exit(1)
+		}
+		defer bus.Close()
+		svc.Bus = bus
+	}
 	var platformCA *ca.CA
 	if dir := os.Getenv("CA_DIR"); dir != "" {
 		c, err := ca.EnsureCA(dir)
@@ -77,6 +87,7 @@ func main() {
 	metadata.MountRepair(mux, svc)
 	metadata.MountChallenges(mux, svc)
 	metadata.MountDemo(mux, svc)
+	metadata.MountLifecycle(mux, svc)
 
 	if platformCA != nil {
 		cert, err := platformCA.EnsureServiceCert(os.Getenv("CA_DIR"), "metadata")

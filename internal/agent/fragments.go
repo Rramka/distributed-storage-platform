@@ -93,8 +93,14 @@ func (a *Agent) handleGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "hash mismatch", http.StatusConflict)
 		return
 	}
+	rec, err := receipts.SignEgress(a.id.Priv, a.id.ID, id, meta.SHA256, uint64(meta.Size), meta.StoredAt, tk.Nonce)
+	if err != nil {
+		http.Error(w, "sign failed", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(meta.Size, 10))
+	w.Header().Set("X-DSP-Receipt", rec.Raw)
 	if rng := r.Header.Get("Range"); rng != "" {
 		http.ServeContent(w, r, "", meta.StoredAt, f)
 		return

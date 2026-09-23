@@ -12,6 +12,7 @@ import (
 	"github.com/Rramka/distributed-storage-platform/internal/ca"
 	"github.com/Rramka/distributed-storage-platform/internal/events"
 	"github.com/Rramka/distributed-storage-platform/internal/httpserver"
+	"github.com/Rramka/distributed-storage-platform/internal/lifecycle"
 	"github.com/Rramka/distributed-storage-platform/internal/repair"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 )
@@ -77,6 +78,10 @@ func main() {
 		MaxConcurrent: maxC,
 		BudgetBps:     budget,
 	}
+	go func() {
+		reaper := &lifecycle.Reaper{Store: st, Meta: lifecycle.NewMeta(metaURL), CA: leaf}
+		reaper.Run(ctx)
+	}()
 	slog.Info("repair worker running")
 	if err := w.Run(ctx); err != nil && !errorsIsCanceled(err) {
 		slog.Error("repair exited", "err", err)

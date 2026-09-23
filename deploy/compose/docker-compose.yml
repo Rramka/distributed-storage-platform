@@ -68,6 +68,7 @@ services:
       HTTP_ADDR: ":8080"
       REDIS_URL: redis://redis:6379
       METADATA_URL: http://metadata:8081
+      LEDGER_URL: http://ledger:8085
       DEMO_MODE: "1"
     ports:
       - "8080:8080"
@@ -79,6 +80,8 @@ services:
       nats:
         condition: service_healthy
       metadata:
+        condition: service_healthy
+      ledger:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
@@ -97,6 +100,7 @@ services:
       HTTP_ADDR: ":8081"
       NODE_API_ADDR: ":8444"
       POSTGRES_URL: postgres://dsp:dsp@postgres:5432/dsp?sslmode=disable
+      NATS_URL: nats://nats:4222
       SCHEDULER_URL: http://scheduler:8082
       CA_DIR: /ca
       <<: *ticket
@@ -107,6 +111,8 @@ services:
       - "8444:8444"
     depends_on:
       postgres:
+        condition: service_healthy
+      nats:
         condition: service_healthy
       ca-init:
         condition: service_completed_successfully
@@ -217,6 +223,30 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8084/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  ledger:
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile
+      args:
+        SERVICE: ledger
+    environment:
+      HTTP_ADDR: ":8085"
+      POSTGRES_URL: postgres://dsp:dsp@postgres:5432/dsp?sslmode=disable
+      NATS_URL: nats://nats:4222
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8085/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -8,19 +8,18 @@ The original M0–M6 timeline below assumed a small team (2–4 engineers) over 
 
 > `dsp put Vacation.mp4` → kill 6 of 16 storage nodes on camera → file still downloads byte-identical → fleet self-heals back to 16/16 in minutes → and the platform's own database, dumped on screen, decrypts nothing.
 
-That scene is **M0–M4**, minus anything that does not appear in it. Weeks in this section are calendar weeks for one person, not the original team sizing.
+That scene is **M0–M4**. **M5** (meters + internal ledger) is now the active engineering track. Weeks in this section are calendar weeks for one person, not the original team sizing.
 
-### What we build (M0–M4)
+### What we build (M0–M5)
 
-Metadata service, minimal API gateway (**API-key auth only**), node agent, tickets/receipts, client pipeline (Argon2id → AES-256-GCM → 16 MB chunks → Reed–Solomon 10+6), naive-then-scored scheduler, health monitor, repair service, chaos harness, one small fleet-visualizer web page.
+Metadata service, minimal API gateway (**API-key auth only**), node agent, tickets/receipts, client pipeline (Argon2id → AES-256-GCM → 16 MB chunks → Reed–Solomon 10+6), naive-then-scored scheduler, health monitor, repair service, chaos harness, one small fleet-visualizer web page, honest meters (uptime, audits, ingest, egress, deletion lifecycle), usage event stream, double-entry ledger, `GET /storage` and `GET /earnings`.
 
 ### Explicitly deferred (do not start)
 
-These remain specified in the docs for later phases. They are **out of the solo track**. Do not implement them until the durability demo is recorded.
+These remain specified in the docs for later phases. They are **out of the solo track**.
 
 | Deferred | Why | Spec |
 |---|---|---|
-| Ledger / billing service | Investors fund the durability claim, not the invoice screen | [09-billing-ledger.md](09-billing-ledger.md) |
 | Customer, provider, and admin dashboards | Replaced by the fleet visualizer + CLI for the demo | M6 below |
 | JWT / refresh tokens | API keys are enough for CLI and agents | [08-api.md](08-api.md) |
 | Agent installers and self-update | Compose fleet is the demo; real installers come after | M6 below |
@@ -41,6 +40,9 @@ These remain specified in the docs for later phases. They are **out of the solo 
 - **W12** — Demo video, deck, data room, landing page with waitlist. **Shipped (harness + artifacts).** `make demo` writes `business/updates/demo-metrics-YYYY-MM-DD.json`. The landing page is static (`web/landing/`) with a third-party Formspree waitlist — no control-plane route, no waitlist table. Screen recording of the visualizer remains a human step (`business/updates/demo-script-w12.md`).
 - **W13** — Chaos completeness, honest CI, property coverage. **Shipped.** `harness partition` freezes a region with `docker compose pause` (cgroup freezer, not iptables: published-port DNAT is not restored by `docker network connect`, so a bridge cut cannot heal without a restart). While partitioned, every chunk must stay ≥ 13 healthy (16 − region cap). `throttle` is retired: `bandwidth_factor` is a documented neutral constant (1.0), so a `tc` cap would not change placement. Phantom `clock-skew` / `disk-full` / `slow-disk` verbs are dropped from the list. CI `test` job is `go test ./... -short`; the `invariants` job runs `go test ./...` against Postgres. Nightly runs the regional partition scenario and a 20-minute soak.
 - **W14** — Harden the durability claim. Registration moves onto server-authenticated TLS (`:8444`); one registration code yields one node row; DELETE tickets consume their nonce; failed API-key auth is IP-rate-limited. `PlanUpload` aborts a stranded pending version; download plans prefer online placements; `make demo-ready` + `harness m4` run `dsp get` while six holders are down. Docs match the HTTP/JSON + binary-ticket solo track.
+- **W15** — Honest meters. Real `uptime_ratio` from heartbeat counts; 30-day reliability query; `bytes_ingested` from PUT receipts; signed egress receipts + `POST /download/{id}/report`; deletion lifecycle (`expiring` → agent DELETE → `deleted`). Exit: meters match placement map and transfer receipts.
+- **W16** — Usage stream + double-entry ledger. `USAGE_EVENTS` JetStream, `cmd/ledger` on `:8085`, integer µCRD, injectable-clock accruer, deferred Postgres trigger enforcing `SUM(amount)=0` per `txn_id`. Exit: hourly accruals post balanced transactions.
+- **W17** — Reporting and M5 exit. `GET /storage`, `GET /earnings`, `GET /nodes/{id}/stats`; invariant 3 un-skipped; accelerated-month test (720 windows) produces balanced books. Monthly statements and quota enforcement remain M5b.
 
 A fundraise track runs in parallel (~2 hours/week): market research, competitive comparison, deck, weekly investor update. See `business/` and the Cursor skills `market-research` / `investor-update` / `demo-capture`.
 
@@ -56,7 +58,8 @@ distributed-storage-platform/
     gateway/  metadata/  scheduler/  healthmon/  repair/
     agent/                 # node agent binary
     dsp/                   # customer CLI
-    # deferred: ledger/  admind/
+    ledger/                # internal ledger (M5)
+    # deferred: admind/
   internal/
     pipeline/              # encryption, chunking, erasure coding (shared by CLI and repair)
     tickets/  receipts/  ca/   # crypto primitives
@@ -93,15 +96,15 @@ Reed–Solomon 10+6 on the existing encrypted chunks, plan/transfer/commit with 
 Health Monitor state machine (`online → suspect → offline`), NATS events, Repair Service with priority queue, ciphertext reconstruction, flap handling. Storage challenges with pre-computed challenge sets (Health Monitor refresh path) and full scheduler scoring + weighted sampling ([06-scheduler-and-repair.md](06-scheduler-and-repair.md)) are the M4 follow-up slice after the exit test. **Shipped.**
 **Exit:** kill 6 of 16 agents holding a file; within minutes all chunks are back to 16/16 healthy on survivors + fresh nodes, download works throughout. This milestone is the platform's core claim — it gets the most test investment. The Compose fleet is 24 agents so 8 spares exist under the owner/region/ASN caps.
 
-### M5 — Ledger + billing (week 13–14) — deferred on the solo track
-Usage event stream, double-entry ledger, hourly accruals, reliability multiplier, `GET /storage` and `GET /earnings`, quota enforcement ([09-billing-ledger.md](09-billing-ledger.md)).
+### M5 — Ledger + billing (week 13–14) — **active**
+Usage event stream, double-entry ledger, hourly accruals, reliability multiplier, `GET /storage` and `GET /earnings` ([09-billing-ledger.md](09-billing-ledger.md)). Quota enforcement and monthly statements are M5b.
 **Exit:** a simulated month (accelerated clock) produces balanced books — every txn sums to zero, customer charges reconcile with provider earnings + platform margin.
 
 ### M6 — Dashboards + MVP hardening (week 15–17) — deferred on the solo track
 Customer dashboard (files, usage), provider dashboard (nodes, earnings, registration codes), admin dashboard (network map, repair queue, quarantine actions); audit logging wired through; agent installers + self-update for the three OSes; load and chaos test pass (below).
 **Exit:** the full MVP scope of [01-overview.md](01-overview.md), demoable end-to-end by a non-developer through the dashboards.
 
-The original timeline assumed a small focused team (2–4 engineers). **The active plan is the Solo builder track above.** Treat M5–M6 weeks as relative sizing for after the raise demo.
+The original timeline assumed a small focused team (2–4 engineers). **The active plan is the Solo builder track above.** Treat M6 weeks as relative sizing for after the raise demo.
 
 ## Testing strategy
 
@@ -135,7 +138,7 @@ harness verbs:
 
 1. Every committed chunk has ≥ 12 healthy placements (alert < 13).
 2. No plaintext or unwrapped key ever appears in any node's `data_dir` or any control-plane store.
-3. Ledger: every transaction sums to zero; meters reconcile with the placement map. **(Invariant exists; the ledger service is deferred on the solo track — skip until M5 starts.)**
+3. Ledger: every transaction sums to zero; meters reconcile with the placement map.
 4. Placement constraints (node/region/ASN/owner caps) hold for every chunk after any sequence of repairs.
 
 ## Long-term evolution

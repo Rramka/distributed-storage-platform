@@ -12,7 +12,7 @@ Public JSON over HTTPS at `https://api.<platform-domain>/v1`, served by [[API Ga
 
 Auth: `X-Api-Key` on the solo builder track (JWT deferred until after M4). IDs are UUIDs. Errors share one `{ error: { code, message, request_id } }` shape.
 
-M1 metadata: register, mint API keys (HTTP Basic), buckets, folders, list/rename/soft-delete. Upload plan/commit is M2.
+M1 metadata: register, mint API keys (HTTP Basic), buckets, folders, list/rename/soft-delete. Upload plan/commit is M2. M5: `GET /storage`, `GET /earnings`, `GET /nodes/{id}/stats`, `POST /download/{id}/report`.
 
 ## Surfaces that matter to the graph
 

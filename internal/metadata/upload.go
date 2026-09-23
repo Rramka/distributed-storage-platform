@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Rramka/distributed-storage-platform/internal/events"
 	"github.com/Rramka/distributed-storage-platform/internal/receipts"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/Rramka/distributed-storage-platform/internal/tickets"
@@ -196,6 +197,7 @@ func (s *StoreService) CommitUpload(ctx context.Context, userID, uploadID uuid.U
 	}
 	var stored []uuid.UUID
 	seen := map[uuid.UUID]struct{}{}
+	ingested := map[uuid.UUID]int64{}
 	for _, t := range targets {
 		if t.Placement.Status == "stored" {
 			stored = append(stored, t.Fragment.ID)
@@ -212,6 +214,7 @@ func (s *StoreService) CommitUpload(ctx context.Context, userID, uploadID uuid.U
 			if err == nil {
 				stored = append(stored, t.Fragment.ID)
 				seen[id] = struct{}{}
+				ingested[t.Node.ID] += int64(t.Fragment.SizeBytes)
 				matched = true
 				break
 			}
@@ -223,6 +226,21 @@ func (s *StoreService) CommitUpload(ctx context.Context, userID, uploadID uuid.U
 	f, v, err := s.Store.CommitUpload(ctx, userID, uploadID, stored)
 	if err != nil {
 		return store.File{}, store.FileVersion{}, err
+	}
+	for nodeID, n := range ingested {
+		if err := s.Store.BumpNodeBytes(ctx, nodeID, n, 0); err != nil {
+			slog.Error("metadata.bumpIngest", "err", err, "node_id", nodeID)
+		}
+	}
+	if s.Bus != nil {
+		if err := s.Bus.PublishUsage(ctx, events.UsageEvent{
+			Kind:      events.UsageStorage,
+			SubjectID: userID,
+			Window:    time.Now().UTC(),
+			Payload:   map[string]any{"size_bytes": v.SizeBytes, "file_id": f.ID.String()},
+		}); err != nil {
+			slog.Error("metadata.usage storage", "err", err)
+		}
 	}
 	return f, v, nil
 }
@@ -258,9 +276,14 @@ func (s *StoreService) PlanDownload(ctx context.Context, userID, fileID uuid.UUI
 			if total >= MaxPlanFragments {
 				return DownloadResult{}, ErrInvalid
 			}
-			wire, _, err := s.SignTicket(tickets.OpGet, p.Fragment.ID, p.Node.ID, p.Fragment.SHA256, uint64(p.Fragment.SizeBytes))
+			wire, until, err := s.SignTicket(tickets.OpGet, p.Fragment.ID, p.Node.ID, p.Fragment.SHA256, uint64(p.Fragment.SizeBytes))
 			if err != nil {
 				return DownloadResult{}, err
+			}
+			if tk, err := tickets.Decode(wire); err == nil {
+				if err := s.Store.InsertDownloadTicket(ctx, tk.Nonce, f.ID, p.Fragment.ID, p.Node.ID, int64(p.Fragment.SizeBytes), until); err != nil {
+					return DownloadResult{}, err
+				}
 			}
 			dc.Fragments = append(dc.Fragments, DownloadFragment{
 				ShardIndex: p.Fragment.ShardIndex,
@@ -291,6 +314,62 @@ func pickDownloadPlacements(all []store.DownloadPlacement, need int) []store.Dow
 		return online
 	}
 	return append(online, rest...)
+}
+
+// ReportDownload verifies node-signed GET receipts against issued tickets and meters egress.
+func (s *StoreService) ReportDownload(ctx context.Context, userID, fileID uuid.UUID, wires []string) error {
+	if _, err := s.Store.FileByID(ctx, userID, fileID); err != nil {
+		return err
+	}
+	seen := map[string]struct{}{}
+	var total int64
+	perNode := map[uuid.UUID]int64{}
+	for _, w := range wires {
+		rec, err := receipts.ParseUnsigned(w)
+		if err != nil || len(rec.Nonce) != 16 {
+			return ErrInvalid
+		}
+		key := string(rec.Nonce)
+		if _, ok := seen[key]; ok {
+			return ErrInvalid
+		}
+		seen[key] = struct{}{}
+		t, err := s.Store.DownloadTicketByNonce(ctx, userID, fileID, rec.Nonce)
+		if err != nil {
+			return ErrInvalid
+		}
+		got, err := receipts.Parse(w, ed25519.PublicKey(t.PublicKey))
+		if err != nil {
+			return ErrInvalid
+		}
+		if got.NodeID != t.NodeID || got.FragmentID != t.FragmentID {
+			return ErrInvalid
+		}
+		if got.Size != uint64(t.SizeBytes) {
+			return ErrInvalid
+		}
+		if err := s.Store.ConsumeDownloadReceipt(ctx, rec.Nonce, fileID, t.FragmentID, t.NodeID, int64(got.Size)); err != nil {
+			return ErrInvalid
+		}
+		total += int64(got.Size)
+		perNode[t.NodeID] += int64(got.Size)
+	}
+	for nodeID, n := range perNode {
+		if err := s.Store.BumpNodeBytes(ctx, nodeID, 0, n); err != nil {
+			slog.Error("metadata.bumpEgress", "err", err, "node_id", nodeID)
+		}
+	}
+	if s.Bus != nil && total > 0 {
+		if err := s.Bus.PublishUsage(ctx, events.UsageEvent{
+			Kind:      events.UsageEgress,
+			SubjectID: userID,
+			Window:    time.Now().UTC(),
+			Payload:   map[string]any{"bytes": total, "file_id": fileID.String()},
+		}); err != nil {
+			slog.Error("metadata.usage egress", "err", err)
+		}
+	}
+	return nil
 }
 
 // SignTicketFromSigner adapts tickets.Signer.

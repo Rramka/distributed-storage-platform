@@ -16,6 +16,7 @@ import (
 
 	"github.com/Rramka/distributed-storage-platform/internal/apierr"
 	"github.com/Rramka/distributed-storage-platform/internal/auth"
+	"github.com/Rramka/distributed-storage-platform/internal/ledger"
 	"github.com/Rramka/distributed-storage-platform/internal/metadata"
 	"github.com/Rramka/distributed-storage-platform/internal/ratelimit"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
@@ -37,15 +38,22 @@ type identity struct {
 
 // Server is the public HTTP handler.
 type Server struct {
-	meta  metadata.Service
-	limit *ratelimit.Limiter
-	mux   *http.ServeMux
+	meta   metadata.Service
+	ledger *ledger.Client
+	limit  *ratelimit.Limiter
+	mux    *http.ServeMux
 }
 
 // New returns the public gateway handler. GET /healthz is registered on mux.
 func New(mux *http.ServeMux, meta metadata.Service, limit *ratelimit.Limiter) *Server {
 	s := &Server{meta: meta, limit: limit, mux: mux}
 	s.routes()
+	return s
+}
+
+// WithLedger attaches the billing client (GET /storage, GET /earnings).
+func (s *Server) WithLedger(c *ledger.Client) *Server {
+	s.ledger = c
 	return s
 }
 
@@ -72,6 +80,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/upload", s.with(authKeyWrite, s.handlePlanUpload))
 	s.mux.HandleFunc("POST /v1/upload/{id}/commit", s.with(authKeyWrite, s.handleCommitUpload))
 	s.mux.HandleFunc("GET /v1/download/{id}", s.with(authKey, s.handlePlanDownload))
+	s.mux.HandleFunc("POST /v1/download/{id}/report", s.with(authKey, s.handleReportDownload))
+	s.mux.HandleFunc("GET /v1/storage", s.with(authKey, s.handleStorage))
+	s.mux.HandleFunc("GET /v1/earnings", s.with(authKey, s.handleEarnings))
+	s.mux.HandleFunc("GET /v1/nodes/{id}/stats", s.with(authKey, s.handleNodeStats))
 
 	if os.Getenv("DEMO_MODE") == "1" {
 		s.mux.HandleFunc("GET /v1/demo/fleet", s.handleDemoFleet)
@@ -527,6 +539,74 @@ func (s *Server) handlePlanDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleReportDownload(w http.ResponseWriter, r *http.Request) {
+	id := mustIdentity(r)
+	fid, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		apierr.Write(w, apierr.CodeInvalidRequest, "invalid request", requestID(r))
+		return
+	}
+	var req struct {
+		Receipts []string `json:"receipts"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if err := s.meta.ReportDownload(r.Context(), id.User.ID, fid, req.Receipts); err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
+	if s.ledger == nil {
+		apierr.Write(w, apierr.CodeInternal, "ledger unavailable", requestID(r))
+		return
+	}
+	id := mustIdentity(r)
+	view, err := s.ledger.Storage(r.Context(), id.User.ID)
+	if err != nil {
+		apierr.Write(w, apierr.CodeInternal, "internal error", requestID(r))
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) handleEarnings(w http.ResponseWriter, r *http.Request) {
+	if s.ledger == nil {
+		apierr.Write(w, apierr.CodeInternal, "ledger unavailable", requestID(r))
+		return
+	}
+	id := mustIdentity(r)
+	view, err := s.ledger.Earnings(r.Context(), id.User.ID)
+	if err != nil {
+		apierr.Write(w, apierr.CodeInternal, "internal error", requestID(r))
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) handleNodeStats(w http.ResponseWriter, r *http.Request) {
+	id := mustIdentity(r)
+	nid, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		apierr.Write(w, apierr.CodeInvalidRequest, "invalid request", requestID(r))
+		return
+	}
+	from, _ := time.Parse(time.RFC3339, r.URL.Query().Get("from"))
+	to, _ := time.Parse(time.RFC3339, r.URL.Query().Get("to"))
+	rows, err := s.meta.ListNodeStats(r.Context(), id.User.ID, nid, from, to)
+	if err != nil {
+		s.writeMeta(w, r, err)
+		return
+	}
+	if rows == nil {
+		rows = []store.NodeStats{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"stats": rows})
 }
 
 func (s *Server) handleDemoFleet(w http.ResponseWriter, r *http.Request) {

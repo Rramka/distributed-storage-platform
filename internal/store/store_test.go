@@ -588,3 +588,110 @@ func stringsUpper(s string) string {
 	}
 	return string(b)
 }
+
+func TestNodeReliabilityAndBytes(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "m5-rel-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.CreateNode(ctx, CreateNodeParams{
+		OwnerID:         u.ID,
+		CertFingerprint: []byte(uuid.NewString()),
+		PublicKey:       bytes32(9),
+		CertPEM:         "pem",
+		CertExpiresAt:   time.Now().Add(time.Hour),
+		OS:              "linux",
+		AgentVersion:    "test",
+		Endpoint:        "127.0.0.1:19",
+		CapacityBytes:   1 << 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	window := time.Now().UTC().Truncate(time.Hour)
+	if err := s.UpsertNodeStats(ctx, NodeStats{NodeID: n.ID, WindowStart: window, UptimeRatio: 0.4}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BumpNodeAudit(ctx, n.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BumpNodeBytes(ctx, n.ID, 100, 50); err != nil {
+		t.Fatal(err)
+	}
+	up, audit, err := s.NodeReliability(ctx, n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up <= 0 || up > 1 {
+		t.Fatalf("uptime %v", up)
+	}
+	if audit <= 0 {
+		t.Fatalf("audit %v", audit)
+	}
+	got, err := s.ListNodeStats(ctx, n.ID, window.Add(-time.Hour), window.Add(time.Hour))
+	if err != nil || len(got) == 0 {
+		t.Fatalf("list %v %v", got, err)
+	}
+	if got[0].BytesIngested != 100 || got[0].BytesServed != 50 {
+		t.Fatalf("bytes %+v", got[0])
+	}
+}
+
+func TestSoftDeleteExpiresPlacements(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	fleet, err := s.SeedCommittedFleet(ctx, nil, nil, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SoftDeleteFile(ctx, fleet.User.ID, fleet.File.ID); err != nil {
+		t.Fatal(err)
+	}
+	var st string
+	if err := s.pool.QueryRow(ctx, `SELECT status FROM file_versions WHERE id = $1`, fleet.Version.ID).Scan(&st); err != nil {
+		t.Fatal(err)
+	}
+	if st != "expired" {
+		t.Fatalf("version status %q", st)
+	}
+	exp, err := s.ListExpiringPlacements(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exp) < 16 {
+		t.Fatalf("expiring %d", len(exp))
+	}
+	ids, err := s.UnderHealthyChunks(ctx, 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containsUUID(ids, fleet.ChunkID) {
+		t.Fatal("deleted file should not fail durability")
+	}
+	if err := s.MarkPlacementDeleted(ctx, exp[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range exp[1:] {
+		if err := s.MarkPlacementDeleted(ctx, p.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	left, err := s.ListExpiringPlacements(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 0 {
+		t.Fatalf("still expiring %d", len(left))
+	}
+}
+
+func containsUUID(ids []uuid.UUID, want uuid.UUID) bool {
+	for _, id := range ids {
+		if id == want {
+			return true
+		}
+	}
+	return false
+}

@@ -120,6 +120,10 @@ Optional `?version=` (defaults to current). Response: everything the client need
 }
 ```
 
+### `POST /download/{file_id}/report`
+
+Client submits node-signed GET receipts collected from `X-DSP-Receipt` response headers. Metadata matches each receipt one-to-one against GET tickets issued for this file (ticket nonce), verifies the node signature, rejects duplicates, and increments `node_stats.bytes_served`. Response `200`: `{ "ok": true }`.
+
 ### Remaining file endpoints
 
 | Method & path | Behavior |
@@ -129,7 +133,7 @@ Optional `?version=` (defaults to current). Response: everything the client need
 | `GET /files/{id}` | Single file's metadata and version history. |
 | `POST /folders` | Create a folder row: `{ "bucket_id": …, "path": "/photos/2026" }`. |
 | `PUT /rename` | `{ "file_id": …, "new_path": … }` — metadata-only move; folder renames update the subtree prefix. |
-| `GET /storage` | Account usage summary: bytes stored, bandwidth this cycle, quota, per-bucket breakdown, current-cycle charges from the ledger ([09-billing-ledger.md](09-billing-ledger.md)). |
+| `GET /storage` | Account usage summary: bytes stored, current-cycle charges, ledger balance ([09-billing-ledger.md](09-billing-ledger.md)). Quota is M5b. |
 | `POST /buckets` / `GET /buckets` / `DELETE /buckets/{id}` | Bucket management (delete requires empty). |
 | `GET /health` | Unauthenticated liveness: `{ "status": "ok", "version": … }`. |
 

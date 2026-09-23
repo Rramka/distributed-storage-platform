@@ -33,7 +33,7 @@ Run this at the start of every session. Do not write code until the brief is del
 3. ...
 
 ## Do not touch
-Deferred solo-track items (ledger, dashboards, JWT, installers, rebalancing, S3).
+Deferred solo-track items (dashboards, JWT, installers, rebalancing, S3, real money, M5b statements/quotas).
 ```
 
 5. Prefer finishing an in-progress slice over starting a new service.

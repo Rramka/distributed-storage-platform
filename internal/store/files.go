@@ -199,14 +199,21 @@ func (s *Store) RenameFile(ctx context.Context, ownerID, fileID uuid.UUID, newPa
 	return f, nil
 }
 
-// SoftDeleteFile sets deleted_at. Folders also soft-delete descendants.
+// SoftDeleteFile sets deleted_at, expires versions, and marks placements expiring
+// in one transaction so billing stops at delete (docs/03-data-model.md).
 func (s *Store) SoftDeleteFile(ctx context.Context, ownerID, fileID uuid.UUID) error {
 	f, err := s.FileByID(ctx, ownerID, fileID)
 	if err != nil {
 		return err
 	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return mapQueryErr("store.softDeleteFile", err)
+	}
+	defer tx.Rollback(ctx)
+
 	if f.IsFolder {
-		_, err = s.pool.Exec(ctx, `
+		_, err = tx.Exec(ctx, `
 			UPDATE files
 			SET status = 'deleted', deleted_at = now(), updated_at = now()
 			WHERE bucket_id = $1
@@ -214,13 +221,66 @@ func (s *Store) SoftDeleteFile(ctx context.Context, ownerID, fileID uuid.UUID) e
 			  AND (path = $2 OR path LIKE $2 || '/%')
 		`, f.BucketID, f.Path)
 	} else {
-		_, err = s.pool.Exec(ctx, `
+		_, err = tx.Exec(ctx, `
 			UPDATE files
 			SET status = 'deleted', deleted_at = now(), updated_at = now()
 			WHERE id = $1
 		`, f.ID)
 	}
 	if err != nil {
+		return mapQueryErr("store.softDeleteFile", err)
+	}
+
+	if f.IsFolder {
+		_, err = tx.Exec(ctx, `
+			UPDATE file_versions v
+			SET status = 'expired'
+			FROM files f
+			WHERE v.file_id = f.id
+			  AND v.status IN ('pending', 'committed')
+			  AND f.bucket_id = $1
+			  AND (f.path = $2 OR f.path LIKE $2 || '/%')
+		`, f.BucketID, f.Path)
+	} else {
+		_, err = tx.Exec(ctx, `
+			UPDATE file_versions
+			SET status = 'expired'
+			WHERE file_id = $1 AND status IN ('pending', 'committed')
+		`, f.ID)
+	}
+	if err != nil {
+		return mapQueryErr("store.softDeleteFile", err)
+	}
+
+	if f.IsFolder {
+		_, err = tx.Exec(ctx, `
+			UPDATE fragment_placements p
+			SET status = 'expiring'
+			FROM fragments fr
+			JOIN chunks c ON c.id = fr.chunk_id
+			JOIN file_versions v ON v.id = c.version_id
+			JOIN files f ON f.id = v.file_id
+			WHERE p.fragment_id = fr.id
+			  AND p.status IN ('pending', 'stored', 'lost')
+			  AND f.bucket_id = $1
+			  AND (f.path = $2 OR f.path LIKE $2 || '/%')
+		`, f.BucketID, f.Path)
+	} else {
+		_, err = tx.Exec(ctx, `
+			UPDATE fragment_placements p
+			SET status = 'expiring'
+			FROM fragments fr
+			JOIN chunks c ON c.id = fr.chunk_id
+			JOIN file_versions v ON v.id = c.version_id
+			WHERE p.fragment_id = fr.id
+			  AND p.status IN ('pending', 'stored', 'lost')
+			  AND v.file_id = $1
+		`, f.ID)
+	}
+	if err != nil {
+		return mapQueryErr("store.softDeleteFile", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return mapQueryErr("store.softDeleteFile", err)
 	}
 	return nil

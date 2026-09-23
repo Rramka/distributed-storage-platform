@@ -1,0 +1,204 @@
+// Package ledger is the internal double-entry billing ledger (docs/09-billing-ledger.md).
+// All amounts are integer micro-credits. The ledger is the sole writer of ledger tables.
+package ledger
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strconv"
+
+	"github.com/Rramka/distributed-storage-platform/internal/store"
+	"github.com/google/uuid"
+)
+
+const (
+	MicroPerCRD   int64 = 1_000_000
+	BytesPerGB    int64 = 1_000_000_000
+	HoursPerMonth int64 = 730
+
+	OwnerCustomer = "customer"
+	OwnerProvider = "provider"
+	OwnerPlatform = "platform"
+
+	KindBalance  = "customer_balance"
+	KindEarnings = "provider_earnings"
+	KindRevenue  = "platform_revenue"
+
+	TypeStorageCharge  = "storage_charge"
+	TypeEgressCharge   = "egress_charge"
+	TypeStorageEarning = "storage_earning"
+	TypeEgressEarning  = "egress_earning"
+)
+
+// Rates are Phase 1 defaults from docs/09, overridable via env.
+type Rates struct {
+	CustomerStoragePerGBMonth int64 // µCRD
+	ProviderStoragePerGBMonth int64
+	CustomerEgressPerGB       int64
+	ProviderEgressPerGB       int64
+}
+
+// DefaultRates is 3.0 / 1.5 CRD per GB-month and 1.0 / 0.5 CRD per GB egress.
+func DefaultRates() Rates {
+	r := Rates{
+		CustomerStoragePerGBMonth: 3 * MicroPerCRD,
+		ProviderStoragePerGBMonth: 3 * MicroPerCRD / 2,
+		CustomerEgressPerGB:       1 * MicroPerCRD,
+		ProviderEgressPerGB:       MicroPerCRD / 2,
+	}
+	if v := os.Getenv("LEDGER_CUSTOMER_STORAGE_UCRD_GB_MONTH"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			r.CustomerStoragePerGBMonth = n
+		}
+	}
+	if v := os.Getenv("LEDGER_PROVIDER_STORAGE_UCRD_GB_MONTH"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			r.ProviderStoragePerGBMonth = n
+		}
+	}
+	if v := os.Getenv("LEDGER_CUSTOMER_EGRESS_UCRD_GB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			r.CustomerEgressPerGB = n
+		}
+	}
+	if v := os.Getenv("LEDGER_PROVIDER_EGRESS_UCRD_GB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			r.ProviderEgressPerGB = n
+		}
+	}
+	return r
+}
+
+// Ledger posts balanced transactions.
+type Ledger struct {
+	Store *store.Store
+	Rates Rates
+}
+
+func (l *Ledger) rates() Rates {
+	if l.Rates.CustomerStoragePerGBMonth == 0 {
+		return DefaultRates()
+	}
+	return l.Rates
+}
+
+// EnsureAccount creates the named account.
+func (l *Ledger) EnsureAccount(ctx context.Context, ownerType string, ownerID *uuid.UUID, kind string) (store.LedgerAccount, error) {
+	return l.Store.EnsureLedgerAccount(ctx, ownerType, ownerID, kind)
+}
+
+// Entry is one posting leg.
+type Entry struct {
+	AccountID uuid.UUID
+	Amount    int64
+	Type      string
+	Reference map[string]any
+}
+
+var errUnbalanced = fmt.Errorf("ledger: transaction does not sum to zero")
+
+// PostTxn writes a balanced transaction. Duplicate txnID is a no-op.
+func (l *Ledger) PostTxn(ctx context.Context, txnID uuid.UUID, entries []Entry) error {
+	if err := SumZero(entries); err != nil {
+		return err
+	}
+	exists, err := l.Store.LedgerTxnExists(ctx, txnID)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	rows := make([]store.LedgerEntry, 0, len(entries))
+	for _, e := range entries {
+		ref, _ := json.Marshal(e.Reference)
+		rows = append(rows, store.LedgerEntry{
+			TxnID:     txnID,
+			AccountID: e.AccountID,
+			Amount:    e.Amount,
+			EntryType: e.Type,
+			Reference: ref,
+		})
+	}
+	return l.Store.InsertLedgerEntries(ctx, rows)
+}
+
+// SumZero rejects a non-zero entry set.
+func SumZero(entries []Entry) error {
+	var sum int64
+	if len(entries) == 0 {
+		return errUnbalanced
+	}
+	for _, e := range entries {
+		sum += e.Amount
+	}
+	if sum != 0 {
+		return errUnbalanced
+	}
+	return nil
+}
+
+// StorageChargeµCRD is the hourly customer charge for logical bytes.
+func StorageChargeµCRD(sizeBytes int64, rates Rates) int64 {
+	if sizeBytes <= 0 {
+		return 0
+	}
+	return sizeBytes * rates.CustomerStoragePerGBMonth / BytesPerGB / HoursPerMonth
+}
+
+// StorageEarningµCRD is the hourly provider earning after reliability basis points.
+func StorageEarningµCRD(sizeBytes int64, rates Rates, reliabilityBP int64) int64 {
+	if sizeBytes <= 0 {
+		return 0
+	}
+	base := sizeBytes * rates.ProviderStoragePerGBMonth / BytesPerGB / HoursPerMonth
+	return base * reliabilityBP / 10000
+}
+
+// EgressChargeµCRD is the customer download charge.
+func EgressChargeµCRD(bytes int64, rates Rates) int64 {
+	if bytes <= 0 {
+		return 0
+	}
+	return bytes * rates.CustomerEgressPerGB / BytesPerGB
+}
+
+// EgressEarningµCRD is the provider download earning after reliability.
+func EgressEarningµCRD(bytes int64, rates Rates, reliabilityBP int64) int64 {
+	if bytes <= 0 {
+		return 0
+	}
+	base := bytes * rates.ProviderEgressPerGB / BytesPerGB
+	return base * reliabilityBP / 10000
+}
+
+// ReliabilityBP is R = uptime * audit * reputation, clamped to [0, 1.2], as 1/10000 units.
+func ReliabilityBP(uptime, audit, reputation float32) int64 {
+	r := float64(clamp01(uptime)) * float64(clamp01(audit)) * float64(clamp01(reputation))
+	if r > 1.2 {
+		r = 1.2
+	}
+	if r < 0 {
+		r = 0
+	}
+	return int64(r * 10000)
+}
+
+func clamp01(v float32) float32 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+func ptr(id uuid.UUID) *uuid.UUID { return &id }
+
+// DeterministicTxnID hashes kind+subject+window into a UUID.
+func DeterministicTxnID(kind string, subject uuid.UUID, windowUnix int64) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("%s:%s:%d", kind, subject, windowUnix)))
+}

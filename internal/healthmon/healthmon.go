@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -18,6 +19,14 @@ import (
 )
 
 const liveTTL = 30 * time.Second
+
+// HeartbeatInterval is the agent heartbeat cadence (docs/05-node-agent.md).
+const HeartbeatInterval = 10 * time.Second
+
+// HeartbeatCountKey is the Redis counter for heartbeats in one UTC hour.
+func HeartbeatCountKey(nodeID uuid.UUID, window time.Time) string {
+	return fmt.Sprintf("node:hb:%s:%d", nodeID, window.UTC().Truncate(time.Hour).Unix())
+}
 
 // Server handles POST /internal/heartbeat.
 type Server struct {
@@ -67,6 +76,13 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		slog.Error("healthmon redis", "err", err)
 		apierr.Write(w, apierr.CodeInternal, "internal error", apierr.NewRequestID())
 		return
+	}
+	window := time.Now().UTC().Truncate(time.Hour)
+	hbKey := HeartbeatCountKey(node.ID, window)
+	if err := s.Redis.Incr(r.Context(), hbKey).Err(); err != nil {
+		slog.Error("healthmon heartbeat count", "err", err, "node_id", node.ID)
+	} else if err := s.Redis.Expire(r.Context(), hbKey, 3*time.Hour).Err(); err != nil {
+		slog.Error("healthmon heartbeat expire", "err", err, "node_id", node.ID)
 	}
 	if err := s.Redis.HSet(r.Context(), "node:metrics:"+node.ID.String(), map[string]any{
 		"free_bytes":           req.FreeBytes,

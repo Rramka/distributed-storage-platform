@@ -57,6 +57,7 @@ This last table is the heart of the system and the largest. Indexed **by fragmen
 
 - [[Node Stats]] — hourly rollups; feeds [[Reputation]] and [[Provider Earnings]]
 - [[Ledger Account]] / [[Ledger Entry]] — double-entry; see [[Map of Billing]]
+- [[Usage Event]] — idempotent metering stream
 - [[Audit Log]] — insert-only security event trail
 
 ## Lifecycles that mutate this model

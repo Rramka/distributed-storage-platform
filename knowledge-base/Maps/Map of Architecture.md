@@ -39,6 +39,7 @@ The platform splits into a **[[Control Plane]]** (services we run) and a **[[Dat
 - [[Upload Flow]]
 - [[Download Flow]]
 - [[Repair Loop]]
+- [[File Deletion]]
 - [[Heartbeat Protocol]]
 - [[Node Registration]]
 

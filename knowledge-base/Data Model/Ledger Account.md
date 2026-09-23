@@ -8,7 +8,7 @@ aliases:
 
 # Ledger Account
 
-Double-entry account. `owner_type`: `user` | `node` | `platform`. `kind`: `customer_balance` | `provider_earnings` | `platform_revenue`. Currency: `CRD` ([[Credits]]).
+Double-entry account. `owner_type`: `customer` | `provider` | `platform`. `kind`: `customer_balance` | `provider_earnings` | `platform_revenue`. Currency: `CRD` ([[Credits]]).
 
 Balances are derived (`SUM` of [[Ledger Entry]], plus materialized running balances for display). Entries are the truth.
 

@@ -18,6 +18,7 @@ import (
 const (
 	StreamNodeEvents = "NODE_EVENTS"
 	StreamRepairJobs = "REPAIR_JOBS"
+	StreamUsage      = "USAGE_EVENTS"
 
 	SubjNodeOnline  = "node.online"
 	SubjNodeSuspect = "node.suspect"
@@ -26,6 +27,14 @@ const (
 	SubjRepairCritical = "repair.critical"
 	SubjRepairHigh     = "repair.high"
 	SubjRepairNormal   = "repair.normal"
+
+	SubjUsageStorage = "usage.storage"
+	SubjUsageEgress  = "usage.egress"
+	SubjUsageUptime  = "usage.uptime"
+
+	UsageStorage = "storage"
+	UsageEgress  = "egress"
+	UsageUptime  = "uptime"
 
 	nodeEventsMaxAge  = 24 * time.Hour
 	repairJobsMaxAge  = 24 * time.Hour
@@ -98,6 +107,17 @@ func (b *Bus) ensureStreams(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("events.ensureStreams: %w", err)
 	}
+	_, err = b.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:       StreamUsage,
+		Subjects:   []string{"usage.>"},
+		Retention:  jetstream.LimitsPolicy,
+		MaxAge:     72 * time.Hour,
+		Storage:    jetstream.FileStorage,
+		Duplicates: time.Hour,
+	})
+	if err != nil {
+		return fmt.Errorf("events.ensureStreams: %w", err)
+	}
 	return nil
 }
 
@@ -159,6 +179,57 @@ func PrioritySubject(healthy int) string {
 	default:
 		return SubjRepairNormal
 	}
+}
+
+// UsageEvent is a deterministic metering event (docs/09-billing-ledger.md).
+type UsageEvent struct {
+	Kind      string         `json:"kind"`
+	SubjectID uuid.UUID      `json:"subject_id"`
+	Window    time.Time      `json:"window"`
+	Payload   map[string]any `json:"payload"`
+}
+
+func usageSubject(kind string) (string, bool) {
+	switch kind {
+	case UsageStorage:
+		return SubjUsageStorage, true
+	case UsageEgress:
+		return SubjUsageEgress, true
+	case UsageUptime:
+		return SubjUsageUptime, true
+	default:
+		return "", false
+	}
+}
+
+// UsageMsgID is the JetStream dedup id for a usage event.
+func UsageMsgID(kind string, subject uuid.UUID, window time.Time) string {
+	return fmt.Sprintf("usage:%s:%s:%d", kind, subject, window.UTC().Truncate(time.Hour).Unix())
+}
+
+// PublishUsage emits a metering event. Nil bus is a no-op.
+func (b *Bus) PublishUsage(ctx context.Context, ev UsageEvent) error {
+	if b == nil {
+		return nil
+	}
+	subj, ok := usageSubject(ev.Kind)
+	if !ok {
+		return fmt.Errorf("events.publishUsage: unknown kind %q", ev.Kind)
+	}
+	if ev.Window.IsZero() {
+		ev.Window = time.Now().UTC().Truncate(time.Hour)
+	} else {
+		ev.Window = ev.Window.UTC().Truncate(time.Hour)
+	}
+	payload, err := json.Marshal(ev)
+	if err != nil {
+		return fmt.Errorf("events.publishUsage: %w", err)
+	}
+	id := UsageMsgID(ev.Kind, ev.SubjectID, ev.Window)
+	if _, err := b.js.Publish(ctx, subj, payload, jetstream.WithMsgID(id)); err != nil {
+		return fmt.Errorf("events.publishUsage: %w", err)
+	}
+	return nil
 }
 
 // PublishRepair enqueues a reconstruction job at the priority matching Healthy.

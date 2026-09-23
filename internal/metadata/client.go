@@ -279,6 +279,29 @@ func (c *Client) PlanDownload(ctx context.Context, userID, fileID uuid.UUID) (Do
 	return res, err
 }
 
+func (c *Client) ReportDownload(ctx context.Context, userID, fileID uuid.UUID, recs []string) error {
+	return c.do(ctx, http.MethodPost, "/internal/users/"+userID.String()+"/download/"+fileID.String()+"/report", map[string]any{"receipts": recs}, http.StatusOK, nil)
+}
+
+func (c *Client) ListNodeStats(ctx context.Context, userID, nodeID uuid.UUID, from, to time.Time) ([]store.NodeStats, error) {
+	q := url.Values{}
+	if !from.IsZero() {
+		q.Set("from", from.UTC().Format(time.RFC3339))
+	}
+	if !to.IsZero() {
+		q.Set("to", to.UTC().Format(time.RFC3339))
+	}
+	path := "/internal/users/" + userID.String() + "/nodes/" + nodeID.String() + "/stats"
+	if enc := q.Encode(); enc != "" {
+		path += "?" + enc
+	}
+	var out struct {
+		Stats []store.NodeStats `json:"stats"`
+	}
+	err := c.do(ctx, http.MethodGet, path, nil, http.StatusOK, &out)
+	return out.Stats, err
+}
+
 func (c *Client) Fleet(ctx context.Context) (FleetSnapshot, error) {
 	var out FleetSnapshot
 	err := c.do(ctx, http.MethodGet, "/internal/demo/fleet", nil, http.StatusOK, &out)

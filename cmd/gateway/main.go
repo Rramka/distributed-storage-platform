@@ -6,6 +6,7 @@ import (
 
 	"github.com/Rramka/distributed-storage-platform/internal/gateway"
 	"github.com/Rramka/distributed-storage-platform/internal/httpserver"
+	"github.com/Rramka/distributed-storage-platform/internal/ledger"
 	"github.com/Rramka/distributed-storage-platform/internal/metadata"
 	"github.com/Rramka/distributed-storage-platform/internal/ratelimit"
 	"github.com/redis/go-redis/v9"
@@ -32,6 +33,9 @@ func main() {
 
 	mux := httpserver.NewMux("gateway")
 	h := gateway.New(mux, metadata.NewClient(metaURL), ratelimit.New(rdb))
+	if lu := os.Getenv("LEDGER_URL"); lu != "" {
+		h.WithLedger(ledger.NewClient(lu))
+	}
 	if err := httpserver.ListenAndServe("gateway", httpserver.AddrFromEnv(":8080"), h); err != nil {
 		slog.Error("gateway exited", "err", err)
 		os.Exit(1)
