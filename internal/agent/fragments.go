@@ -108,9 +108,13 @@ func (a *Agent) handleDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid fragment id", http.StatusBadRequest)
 		return
 	}
-	_, err = a.tickets.Verify(ticketFrom(r), tickets.OpDelete, a.id.ID, id)
+	tk, err := a.tickets.Verify(ticketFrom(r), tickets.OpDelete, a.id.ID, id)
 	if err != nil {
 		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if err := a.store.ConsumeNonce(tk.Nonce, tk.ExpiresAt); err != nil {
+		http.Error(w, "replay", http.StatusForbidden)
 		return
 	}
 	if err := a.store.Delete(id); err != nil {

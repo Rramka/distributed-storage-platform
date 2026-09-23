@@ -142,16 +142,28 @@ func (c *Challenger) audit(ctx context.Context, t store.AuditTarget) error {
 	}
 	deadline, cancel := context.WithTimeout(ctx, c.Deadline)
 	defer cancel()
-	got, err := c.DoChallenge(deadline, t.Endpoint, t.NodeID, t.FragmentID, issued[0].Ticket, ch.Offset, ch.Length, ch.Nonce)
-	_ = c.Store.MarkChallengeSpent(ctx, t.FragmentID, t.NodeID, ch.Seq)
-	_ = c.Store.TouchLastAudit(ctx, t.FragmentID, t.NodeID)
-	if err != nil || !bytesEqual(got, ch.Expected) {
-		_, _, _ = c.Store.ApplyReputationEvent(ctx, t.NodeID, store.SignalChallengeFailed)
-		_ = c.Store.BumpNodeAudit(ctx, t.NodeID, false)
+	got, challengeErr := c.DoChallenge(deadline, t.Endpoint, t.NodeID, t.FragmentID, issued[0].Ticket, ch.Offset, ch.Length, ch.Nonce)
+	if err := c.Store.MarkChallengeSpent(ctx, t.FragmentID, t.NodeID, ch.Seq); err != nil {
+		slog.Error("healthmon mark spent", "err", err, "fragment_id", t.FragmentID)
+	}
+	if err := c.Store.TouchLastAudit(ctx, t.FragmentID, t.NodeID); err != nil {
+		slog.Error("healthmon touch audit", "err", err, "fragment_id", t.FragmentID)
+	}
+	if challengeErr != nil || !bytesEqual(got, ch.Expected) {
+		if _, _, rerr := c.Store.ApplyReputationEvent(ctx, t.NodeID, store.SignalChallengeFailed); rerr != nil {
+			slog.Error("healthmon challenge fail reputation", "err", rerr, "node_id", t.NodeID)
+		}
+		if err := c.Store.BumpNodeAudit(ctx, t.NodeID, false); err != nil {
+			slog.Error("healthmon bump audit", "err", err, "node_id", t.NodeID)
+		}
 		return c.failPlacement(ctx, t)
 	}
-	_, _, _ = c.Store.ApplyReputationEvent(ctx, t.NodeID, store.SignalChallengePassed)
-	_ = c.Store.BumpNodeAudit(ctx, t.NodeID, true)
+	if _, _, err := c.Store.ApplyReputationEvent(ctx, t.NodeID, store.SignalChallengePassed); err != nil {
+		slog.Error("healthmon challenge pass reputation", "err", err, "node_id", t.NodeID)
+	}
+	if err := c.Store.BumpNodeAudit(ctx, t.NodeID, true); err != nil {
+		slog.Error("healthmon bump audit", "err", err, "node_id", t.NodeID)
+	}
 	return nil
 }
 
@@ -166,8 +178,12 @@ func (c *Challenger) refill(ctx context.Context, t store.AuditTarget) error {
 	}
 	sum := sha256.Sum256(body)
 	if !bytesEqual(sum[:], t.SHA256) {
-		_, _, _ = c.Store.ApplyReputationEvent(ctx, t.NodeID, store.SignalChallengeFailed)
-		_ = c.Store.BumpNodeAudit(ctx, t.NodeID, false)
+		if _, _, err := c.Store.ApplyReputationEvent(ctx, t.NodeID, store.SignalChallengeFailed); err != nil {
+			slog.Error("healthmon refill reputation", "err", err, "node_id", t.NodeID)
+		}
+		if err := c.Store.BumpNodeAudit(ctx, t.NodeID, false); err != nil {
+			slog.Error("healthmon refill audit", "err", err, "node_id", t.NodeID)
+		}
 		return c.failPlacement(ctx, t)
 	}
 	set := ComputeChallengeSet(body, t.FragmentID, t.NodeID, c.SetSize, c.MaxRange)

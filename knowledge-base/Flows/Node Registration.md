@@ -10,7 +10,7 @@ aliases:
 # Node Registration
 
 1. [[Storage Provider]] generates a one-time code (`POST /nodes/registration-codes`) with `endpoint`, `country`, `region`, and `asn` — the platform is the source of truth for diversity attributes
-2. [[Node Agent]] generates a keypair **locally**, submits CSR + code (`POST /internal/nodes/register`)
+2. [[Node Agent]] generates a keypair **locally**, submits CSR + code over **server-authenticated TLS** (`POST https://metadata:8444/internal/nodes/register`). The code is claimed in one Postgres transaction so concurrent uses produce one [[Node]] row.
 3. Platform CA issues a cert with node UUID as subject; fingerprint pinned on [[Node]]; mint-time country/region/ASN copied onto the node row
 4. Reachability + disk benchmark; unreachable endpoints are rejected (MVP: no NAT relay)
 5. Node goes `online` with [[Reputation]] 0.5 and a **probation quota** (limited placements for 14 days)

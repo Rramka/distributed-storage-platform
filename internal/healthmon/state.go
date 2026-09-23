@@ -112,7 +112,9 @@ func (m *Monitor) scan(ctx context.Context) {
 			slog.Error("healthmon publish", "err", err, "node_id", tr.ID)
 		}
 		if tr.To == "offline" {
-			_, _, _ = m.Store.ApplyReputationEvent(ctx, tr.ID, store.SignalUnplannedOffline)
+			if _, _, err := m.Store.ApplyReputationEvent(ctx, tr.ID, store.SignalUnplannedOffline); err != nil {
+				slog.Error("healthmon offline reputation", "err", err, "node_id", tr.ID)
+			}
 		}
 	}
 }

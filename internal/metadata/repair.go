@@ -162,13 +162,22 @@ func (s *StoreService) CommitRepair(ctx context.Context, chunkID uuid.UUID, wire
 	if err != nil {
 		return err
 	}
+	byFrag := map[uuid.UUID]store.PlacementTarget{}
+	for _, t := range targets {
+		byFrag[t.Fragment.ID] = t
+	}
 	var stored []uuid.UUID
+	seen := map[uuid.UUID]struct{}{}
 	for _, w := range wires {
 		matched := false
-		for _, t := range targets {
+		for id, t := range byFrag {
+			if _, ok := seen[id]; ok {
+				continue
+			}
 			_, err := receipts.Verify(w, ed25519.PublicKey(t.Node.PublicKey), t.Node.ID, t.Fragment.ID, t.Fragment.SHA256, uint64(t.Fragment.SizeBytes))
 			if err == nil {
 				stored = append(stored, t.Fragment.ID)
+				seen[id] = struct{}{}
 				matched = true
 				break
 			}

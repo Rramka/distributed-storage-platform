@@ -15,6 +15,7 @@ Design goals, in order: **do no harm to the host**, **be verifiably honest**, **
 ## Internals
 
 - Fragment API (HTTPS) — PUT/GET/DELETE, authorized by [[Placement Ticket]] / [[Retrieval Ticket]]. `GET /challenge` is M4.
+- Registration — HTTP/JSON POST over server-authenticated TLS to metadata `:8444` (one-time code)
 - Heartbeat loop — HTTP/JSON POST every 10s over [[mTLS]] to [[Health Monitor]] (gRPC deferred past M4)
 - Chunk store — fragment files fanned by ID prefix + bbolt `meta.db`
 - Integrity auditor is the M4 [[Storage Challenge]] path. GC worker, bandwidth limiter, and self-updater remain deferred past M4.

@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/ca"
@@ -16,11 +19,8 @@ import (
 )
 
 func main() {
-	go func() {
-		if err := httpserver.ListenAndServe("healthmon", httpserver.AddrFromEnv(":8083"), nil); err != nil {
-			slog.Error("healthmon healthz", "err", err)
-		}
-	}()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	pg := os.Getenv("POSTGRES_URL")
 	redisURL := os.Getenv("REDIS_URL")
@@ -30,7 +30,7 @@ func main() {
 		slog.Error("POSTGRES_URL, REDIS_URL, CA_DIR, NATS_URL required")
 		os.Exit(1)
 	}
-	st, err := store.Open(context.Background(), pg)
+	st, err := store.Open(ctx, pg)
 	if err != nil {
 		slog.Error("healthmon store", "err", err)
 		os.Exit(1)
@@ -44,7 +44,7 @@ func main() {
 	rdb := redis.NewClient(opt)
 	defer rdb.Close()
 
-	bus, err := events.Connect(context.Background(), natsURL)
+	bus, err := events.Connect(ctx, natsURL)
 	if err != nil {
 		slog.Error("healthmon nats", "err", err)
 		os.Exit(1)
@@ -62,6 +62,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	healthz := httpserver.NewServer(httpserver.AddrFromEnv(":8083"), httpserver.NewMux("healthmon"))
+	go func() {
+		if err := healthz.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("healthmon healthz", "err", err)
+		}
+	}()
+
 	mux := http.NewServeMux()
 	healthmon.Mount(mux, &healthmon.Server{Store: st, Redis: rdb, Bus: bus})
 	suspect, offline := healthmon.DurationsFromEnv()
@@ -71,7 +78,7 @@ func main() {
 		SuspectAfter: suspect,
 		OfflineAfter: offline,
 	}
-	go mon.Run(context.Background())
+	go mon.Run(ctx)
 	if mu := os.Getenv("METADATA_URL"); mu != "" {
 		tick, interval := healthmon.ChallengeDurationsFromEnv()
 		ch := &healthmon.Challenger{
@@ -82,22 +89,26 @@ func main() {
 			Tick:     tick,
 			Interval: interval,
 		}
-		go ch.Run(context.Background())
-		go healthmon.RunRollup(context.Background(), st, rdb)
+		go ch.Run(ctx)
+		go healthmon.RunRollup(ctx, st, rdb)
 	}
 	addr := os.Getenv("HEARTBEAT_ADDR")
 	if addr == "" {
 		addr = ":8443"
 	}
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		TLSConfig:         c.ServerTLSConfig(cert, true),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	slog.Info("healthmon mTLS listening", "addr", addr)
-	if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-		slog.Error("healthmon exited", "err", err)
-		os.Exit(1)
-	}
+	srv := httpserver.NewTLSServer(addr, mux, c.ServerTLSConfig(cert, true))
+	go func() {
+		slog.Info("healthmon mTLS listening", "addr", addr)
+		if err := srv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("healthmon exited", "err", err)
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("healthmon shutting down")
+	shut, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shut)
+	_ = healthz.Shutdown(shut)
 }

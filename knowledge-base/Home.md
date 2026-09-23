@@ -11,7 +11,7 @@ aliases:
 
 A decentralized cloud storage network. Unused disk on ordinary computers becomes a secure, globally distributed cloud. The platform orchestrates; it never stores file contents and can never decrypt them.
 
-**Status:** Phase 1 — solo builder track. Specs in `docs/` are canonical. **M0–M4 and W10–W13 are in the repo** (challenges, scored scheduler, fleet visualizer, soak/CI, demo metrics, deck/data-room notes, static waitlist page, regional partition). Ledger and dashboards are deferred. See [[Map of Roadmap]].
+**Status:** Phase 1 — solo builder track. Specs in `docs/` are canonical. **M0–M4 and W10–W14 are in the repo** (challenges, scored scheduler, fleet visualizer, soak/CI, demo metrics, TLS registration, one-command demo). Ledger and dashboards are deferred. See [[Map of Roadmap]].
 
 ## Open the graph
 

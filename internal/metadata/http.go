@@ -16,6 +16,34 @@ import (
 	"github.com/google/uuid"
 )
 
+// MountNode registers the node-facing registration ceremony (TLS listener).
+func MountNode(mux *http.ServeMux, svc Service) {
+	mux.HandleFunc("POST /internal/nodes/register", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RegistrationCode string `json:"registration_code"`
+			CSR              string `json:"csr"`
+			Endpoint         string `json:"endpoint"`
+			OS               string `json:"os"`
+			AgentVersion     string `json:"agent_version"`
+			HostnameLabel    string `json:"hostname_label"`
+			CapacityBytes    int64  `json:"capacity_bytes"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		csr, err := decodeB64(req.CSR)
+		if err != nil {
+			writeErr(w, r, ErrInvalid)
+			return
+		}
+		n, pem, err := svc.RegisterNode(r.Context(), req.RegistrationCode, csr, req.Endpoint, req.OS, req.AgentVersion, req.HostnameLabel, req.CapacityBytes)
+		if writeErr(w, r, err) {
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"node_id": n.ID.String(), "cert_pem": pem, "endpoint": n.Endpoint})
+	})
+}
+
 // Mount registers internal HTTP routes on mux. GET /healthz should already be present.
 func Mount(mux *http.ServeMux, svc Service) {
 	mux.HandleFunc("POST /internal/users", func(w http.ResponseWriter, r *http.Request) {
@@ -267,31 +295,6 @@ func Mount(mux *http.ServeMux, svc Service) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	})
-
-	mux.HandleFunc("POST /internal/nodes/register", func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			RegistrationCode string `json:"registration_code"`
-			CSR              string `json:"csr"`
-			Endpoint         string `json:"endpoint"`
-			OS               string `json:"os"`
-			AgentVersion     string `json:"agent_version"`
-			HostnameLabel    string `json:"hostname_label"`
-			CapacityBytes    int64  `json:"capacity_bytes"`
-		}
-		if !decode(w, r, &req) {
-			return
-		}
-		csr, err := decodeB64(req.CSR)
-		if err != nil {
-			writeErr(w, r, ErrInvalid)
-			return
-		}
-		n, pem, err := svc.RegisterNode(r.Context(), req.RegistrationCode, csr, req.Endpoint, req.OS, req.AgentVersion, req.HostnameLabel, req.CapacityBytes)
-		if writeErr(w, r, err) {
-			return
-		}
-		writeJSON(w, http.StatusCreated, map[string]any{"node_id": n.ID.String(), "cert_pem": pem, "endpoint": n.Endpoint})
 	})
 
 	mux.HandleFunc("POST /internal/users/{userID}/registration-codes", func(w http.ResponseWriter, r *http.Request) {

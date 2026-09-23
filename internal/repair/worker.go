@@ -147,7 +147,9 @@ func (w *Worker) revalidate(ctx context.Context, nodeID uuid.UUID, row metadata.
 	ch, err := w.Store.TakeNextUnspent(ctx, fid, nodeID)
 	if err == nil && row.ChallengeTicket != "" {
 		got, err := getChallenge(ctx, w.CA, row.Endpoint, nodeID.String(), row.FragmentID, row.ChallengeTicket, ch.Offset, ch.Length, ch.Nonce)
-		_ = w.Store.MarkChallengeSpent(ctx, fid, nodeID, ch.Seq)
+		if serr := w.Store.MarkChallengeSpent(ctx, fid, nodeID, ch.Seq); serr != nil {
+			slog.Error("repair mark spent", "err", serr, "fragment_id", fid)
+		}
 		if err != nil {
 			return false, nil
 		}
@@ -169,7 +171,9 @@ func (w *Worker) revalidate(ctx context.Context, nodeID uuid.UUID, row metadata.
 	}
 	w.account(len(body))
 	set := healthmon.ComputeChallengeSet(body, fid, nodeID, 8, 4096)
-	_ = w.Store.InsertChallengeSet(ctx, set)
+	if err := w.Store.InsertChallengeSet(ctx, set); err != nil {
+		slog.Error("repair insert challenge set", "err", err, "fragment_id", fid)
+	}
 	return true, nil
 }
 
@@ -203,10 +207,14 @@ func (w *Worker) drainJobs(ctx context.Context) error {
 			w.release()
 			if err != nil {
 				slog.Error("repair job", "err", err)
-				_ = nak()
+				if nerr := nak(); nerr != nil {
+					slog.Error("repair nak", "err", nerr)
+				}
 				continue
 			}
-			_ = ack()
+			if err := ack(); err != nil {
+				slog.Error("repair ack", "err", err)
+			}
 			break
 		}
 		if !got {
@@ -260,7 +268,9 @@ func (w *Worker) onJob(ctx context.Context, data []byte) error {
 			slog.Warn("repair put", "err", err, "endpoint", tgt.Endpoint, "fragment", tgt.FragmentID)
 			if nid, perr := uuid.Parse(tgt.NodeID); perr == nil {
 				if fid, ferr := uuid.Parse(tgt.FragmentID); ferr == nil {
-					_, _ = w.Store.MarkPlacementLost(ctx, fid, nid)
+					if _, lerr := w.Store.MarkPlacementLost(ctx, fid, nid); lerr != nil {
+						slog.Error("repair mark lost", "err", lerr, "fragment_id", fid)
+					}
 				}
 			}
 			continue

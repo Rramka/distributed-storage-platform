@@ -28,7 +28,7 @@ flowchart LR
         wrapped[Wrapped FK blob]
         hashes[Fragment and chunk hashes]
     end
-    mk -->|AES-KW wrap| wrapped
+    mk -->|"AES-256-GCM wrap (AAD fk)"| wrapped
     fk -->|AES-256-GCM| bytes[File bytes -> encrypted fragments on nodes]
 ```
 
@@ -50,27 +50,26 @@ Three principal types, three mechanisms:
 
 ### Nodes
 - At registration the agent generates a keypair locally and submits a CSR bound to a one-time registration code from the provider's dashboard. The platform CA issues a certificate with the node UUID as its subject; the fingerprint is pinned in the `nodes` table.
-- All node ↔ platform traffic is **mTLS** against the private CA — a node *is* its certificate. Certificates are short-lived (30 days) and renewed automatically over the authenticated channel; revocation is enforced by fingerprint check against the registry on every connection, so a stolen certificate dies with a database flag rather than waiting on CRL propagation.
+- **Registration** is server-authenticated TLS 1.3 (`POST /internal/nodes/register` on the metadata node listener, default `:8444`) with the one-time registration code as the credential. The agent already holds the platform CA, so it can pin the server; it cannot present a client certificate yet because that certificate is what the ceremony issues. After registration, every node ↔ platform call is **mTLS** against the private CA — a node *is* its certificate. Certificates are short-lived (30 days) and renewed automatically over the authenticated channel; revocation is enforced by fingerprint check against the registry on every connection, so a stolen certificate dies with a database flag rather than waiting on CRL propagation.
 - The private key never leaves the node. Cloning a node's identity onto a second machine is detectable (concurrent heartbeat streams from different addresses) and results in quarantine.
 
 ### Services
-- Internal gRPC uses mutual TLS with per-service certificates and least-privilege database roles (e.g., nothing but the Ledger service can write `ledger_entries`; nothing at all can update `audit_logs`).
+- Internal control-plane RPC on the solo track is **HTTP/JSON** (gRPC/protobuf deferred). Service-to-service calls on the Compose network are plaintext HTTP; node-facing listeners (registration, heartbeats) are TLS 1.3. Least-privilege database roles still apply (e.g., nothing but the Ledger service can write `ledger_entries`; nothing at all can update `audit_logs`).
 
 ## Tickets: capability-based data-plane authorization
 
 Storage nodes never see customer identity, yet must authorize every transfer. The mechanism is signed, single-purpose **tickets** (Ed25519, platform-signed), issued by the Metadata Service during upload/download planning:
 
-```json
-{
-  "op": "put",                      // put | get
-  "fragment_id": "…",
-  "node_id": "…",                   // ticket is useless at any other node
-  "sha256": "…",                    // for put: hash the node must verify
-  "max_bytes": 1677722,
-  "expires_at": "2026-07-25T21:10:00Z",   // minutes-scale lifetime
-  "nonce": "…",                     // single-use; node rejects replays within expiry window
-  "sig": "ed25519:…"
-}
+```text
+wire = base64url(payload) + "." + base64url(ed25519_sig)
+payload is a canonical binary encoding of:
+  op            // put | get | delete | challenge
+  fragment_id   // UUID; ticket is useless for any other fragment
+  node_id       // UUID; ticket is useless at any other node
+  sha256        // for put: hash the node must verify
+  max_bytes
+  expires_at    // minutes-scale lifetime
+  nonce         // single-use; node rejects replays (ConsumeNonce) within expiry
 ```
 
 The node checks the signature against the pinned platform public key, the node ID, expiry, and nonce — and needs nothing else. Properties: a leaked ticket is nearly worthless (minutes-lived, single fragment, single node, single direction); nodes make zero authorization calls to the platform (the data plane stays fast and the control plane stays out of the byte path); and for uploads the expected hash rides in the ticket, so a node can never be tricked into storing bytes that don't match what the customer registered.
@@ -106,7 +105,7 @@ Audit scheduling: every fragment is challenged on a randomized interval averagin
 
 - **TLS 1.3 only** on data-plane and node-control listeners. **Solo-track exception:** `GET /healthz` on every process is plaintext HTTP so Compose healthchecks can probe without a client certificate.
 - Customer ↔ platform: TLS + API key (JWT deferred).
-- Node ↔ platform: mTLS (private CA), certificate-pinned both ways. Registration and heartbeats are **HTTP/JSON** over that mTLS channel (gRPC deferred past M4).
+- Node ↔ platform after identity is issued: mTLS (private CA), certificate-pinned both ways. Heartbeats are **HTTP/JSON** `POST /internal/heartbeat` over that mTLS channel (gRPC deferred past M4). Registration is server-authenticated TLS plus the one-time code (see Nodes above).
 - Client ↔ node: TLS (node's platform-issued certificate, so clients verify they're talking to a registered node) + ticket authorization. Fragment bytes are already AES-256-GCM ciphertext — TLS here protects tickets and traffic metadata, not confidentiality of the payload.
 - Repair worker ↔ node: mTLS + tickets, same as clients.
 

@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -435,6 +437,131 @@ func TestNodesByRegion(t *testing.T) {
 	empty, err := s.NodesByRegion(ctx, "no-such-"+tag)
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("empty: %d %v", len(empty), err)
+	}
+}
+
+func testManifest(t *testing.T, bucketID uuid.UUID, path string, sha []byte) UploadManifest {
+	t.Helper()
+	frags := make([]ManifestFragment, 16)
+	for i := range frags {
+		frags[i] = ManifestFragment{ShardIndex: int16(i), SizeBytes: 32, SHA256: bytes32(byte(i + 2))}
+	}
+	return UploadManifest{
+		BucketID:       bucketID,
+		Path:           path,
+		SizeBytes:      100,
+		ContentSHA256:  sha,
+		EncryptionMeta: []byte(`{"algo":"aes-256-gcm"}`),
+		ChunkSize:      16 * 1024 * 1024,
+		ECData:         10,
+		ECParity:       6,
+		Chunks:         []ManifestChunk{{Seq: 0, SizeBytes: 100, SHA256: sha, Fragments: frags}},
+	}
+}
+
+func TestBeginUploadResumeSameHash(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "resume-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateBucket(ctx, u.ID, "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha := bytes32(11)
+	path := "/resume-" + uuid.NewString()
+	first, err := s.BeginUpload(ctx, u.ID, testManifest(t, b.ID, path, sha))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Resume {
+		t.Fatal("first plan should not resume")
+	}
+	second, err := s.BeginUpload(ctx, u.ID, testManifest(t, b.ID, path, sha))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Resume || second.Version.ID != first.Version.ID {
+		t.Fatalf("resume=%v version %s want %s", second.Resume, second.Version.ID, first.Version.ID)
+	}
+}
+
+func TestAbortUploadAllowsNewPlan(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "abort-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateBucket(ctx, u.ID, "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha := bytes32(12)
+	path := "/abort-" + uuid.NewString()
+	first, err := s.BeginUpload(ctx, u.ID, testManifest(t, b.ID, path, sha))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AbortUpload(ctx, first.Version.ID); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.BeginUpload(ctx, u.ID, testManifest(t, b.ID, path, sha))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Resume || second.Version.ID == first.Version.ID {
+		t.Fatalf("expected a new version after abort, resume=%v", second.Resume)
+	}
+}
+
+func TestRegisterNodeOneCodeOneNode(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	u, err := s.CreateUser(ctx, "reg-"+uuid.NewString()+"@example.com", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asn := 64500
+	codeHash := "hash-" + uuid.NewString()
+	_, err = s.MintRegistrationCode(ctx, u.ID, codeHash, "127.0.0.1:7443", "US", "us-east", &asn, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 8
+	var ok atomic.Int32
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			_, err := s.RegisterNode(ctx, codeHash, CreateNodeParams{
+				CertFingerprint: []byte(uuid.NewString()),
+				PublicKey:       bytes32(byte(i + 1)),
+				CertPEM:         "pem",
+				CertExpiresAt:   time.Now().Add(time.Hour),
+				OS:              "linux",
+				AgentVersion:    "test",
+				CapacityBytes:   1 << 30,
+			})
+			if err == nil {
+				ok.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if ok.Load() != 1 {
+		t.Fatalf("successful registrations %d want 1", ok.Load())
+	}
+	nodes, err := s.ListNodesByOwner(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("nodes %d want 1", len(nodes))
 	}
 }
 

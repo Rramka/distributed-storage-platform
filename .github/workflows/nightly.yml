@@ -31,7 +31,14 @@ jobs:
           go run ./cmd/dsp buckets create -name soak || true
           go run ./cmd/dsp put /tmp/dsp-fixture.bin soak:/fixture.bin
       - name: Chaos M4
-        run: make chaos-m4 | tee chaos-report.txt
+        env:
+          DSP_API_URL: http://127.0.0.1:8080
+          DSP_PASSPHRASE: nightly-soak-pass
+        run: |
+          export DSP_API_KEY=$(cat .local/api.key)
+          export DSP_CA_FILE=.local/ca.crt
+          export DSP_GET_CMD="DSP_API_URL=$DSP_API_URL DSP_CA_FILE=$DSP_CA_FILE DSP_API_KEY=$DSP_API_KEY DSP_PASSPHRASE=$DSP_PASSPHRASE go run ./cmd/dsp get soak:/fixture.bin /tmp/dsp-get.bin"
+          make chaos-m4 | tee chaos-report.txt
       - name: Restart agents after M4
         run: |
           for i in $(seq 1 24); do docker start "dsp-agent${i}-1" || true; done

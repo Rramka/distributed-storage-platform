@@ -185,6 +185,48 @@ func TestChallengeRejects(t *testing.T) {
 	})
 }
 
+func TestDeleteTicketReplay(t *testing.T) {
+	t.Parallel()
+	a, signer, nodeID := testAgent(t)
+	payload := []byte("delete-replay-bytes")
+	frag := putFrag(t, a, payload)
+	sum := sha256.Sum256(payload)
+	tk, err := signer.Sign(tickets.Ticket{
+		Op:         tickets.OpDelete,
+		FragmentID: frag,
+		NodeID:     nodeID,
+		SHA256:     sum[:],
+		MaxBytes:   uint64(len(payload)),
+		ExpiresAt:  time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(a.Handler())
+	t.Cleanup(srv.Close)
+	url := srv.URL + "/fragments/" + frag.String()
+	req, _ := http.NewRequest(http.MethodDelete, url, nil)
+	req.Header.Set("X-DSP-Ticket", tk.Raw)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("first delete %d", resp.StatusCode)
+	}
+	req2, _ := http.NewRequest(http.MethodDelete, url, nil)
+	req2.Header.Set("X-DSP-Ticket", tk.Raw)
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusForbidden {
+		t.Fatalf("replay %d", resp2.StatusCode)
+	}
+}
+
 func TestChallengePropertyRandomRange(t *testing.T) {
 	t.Parallel()
 	a, signer, nodeID := testAgent(t)

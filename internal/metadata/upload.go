@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/receipts"
@@ -73,6 +74,9 @@ type DownloadResult struct {
 	Chunks         []DownloadChunk `json:"chunks"`
 }
 
+// MaxPlanFragments is the ticket-batch cap from docs/08-api.md.
+const MaxPlanFragments = 10000
+
 // PlanUpload creates/resumes a pending version and issues tickets.
 func (s *StoreService) PlanUpload(ctx context.Context, userID uuid.UUID, m store.UploadManifest) (PlanResult, error) {
 	if s.Place == nil || s.SignTicket == nil {
@@ -82,6 +86,17 @@ func (s *StoreService) PlanUpload(ctx context.Context, userID uuid.UUID, m store
 	if err != nil {
 		return PlanResult{}, err
 	}
+	committed := false
+	defer func() {
+		if committed || planned.Resume {
+			return
+		}
+		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := s.Store.AbortUpload(abortCtx, planned.Version.ID); err != nil {
+			slog.Error("metadata.abortUpload", "err", err, "version_id", planned.Version.ID)
+		}
+	}()
 	var needs []PlaceNeed
 	for _, pf := range planned.Pending {
 		if pf.Placement != nil {
@@ -162,6 +177,10 @@ func (s *StoreService) PlanUpload(ctx context.Context, userID uuid.UUID, m store
 			Ticket:     wire,
 		})
 	}
+	if len(out) > MaxPlanFragments {
+		return PlanResult{}, ErrInvalid
+	}
+	committed = true
 	return PlanResult{UploadID: planned.Version.ID, FileID: planned.File.ID, ExpiresAt: exp, Placements: out}, nil
 }
 
@@ -176,20 +195,23 @@ func (s *StoreService) CommitUpload(ctx context.Context, userID, uploadID uuid.U
 		byFrag[t.Fragment.ID] = t
 	}
 	var stored []uuid.UUID
+	seen := map[uuid.UUID]struct{}{}
 	for _, t := range targets {
 		if t.Placement.Status == "stored" {
 			stored = append(stored, t.Fragment.ID)
+			seen[t.Fragment.ID] = struct{}{}
 		}
 	}
 	for _, w := range wires {
 		matched := false
-		for _, t := range targets {
-			if t.Placement.Status == "stored" {
+		for id, t := range byFrag {
+			if _, ok := seen[id]; ok {
 				continue
 			}
 			_, err := receipts.Verify(w, ed25519.PublicKey(t.Node.PublicKey), t.Node.ID, t.Fragment.ID, t.Fragment.SHA256, uint64(t.Fragment.SizeBytes))
 			if err == nil {
 				stored = append(stored, t.Fragment.ID)
+				seen[id] = struct{}{}
 				matched = true
 				break
 			}
@@ -221,9 +243,21 @@ func (s *StoreService) PlanDownload(ctx context.Context, userID, fileID uuid.UUI
 		ContentSHA256:  hex.EncodeToString(v.ContentSHA256),
 		EncryptionMeta: json.RawMessage(v.EncryptionMeta),
 	}
+	total := 0
+	need := int(v.ECDataShards)
+	if need <= 0 {
+		need = 10
+	}
 	for _, ch := range chunks {
+		picked := pickDownloadPlacements(ch.Placements, need)
+		if len(picked) < need {
+			return DownloadResult{}, ErrUnavailable
+		}
 		dc := DownloadChunk{Seq: ch.Chunk.Seq, SHA256: hex.EncodeToString(ch.Chunk.SHA256), SizeBytes: ch.Chunk.SizeBytes}
-		for _, p := range ch.Placements {
+		for _, p := range picked {
+			if total >= MaxPlanFragments {
+				return DownloadResult{}, ErrInvalid
+			}
 			wire, _, err := s.SignTicket(tickets.OpGet, p.Fragment.ID, p.Node.ID, p.Fragment.SHA256, uint64(p.Fragment.SizeBytes))
 			if err != nil {
 				return DownloadResult{}, err
@@ -237,10 +271,26 @@ func (s *StoreService) PlanDownload(ctx context.Context, userID, fileID uuid.UUI
 				Endpoint:   p.Node.Endpoint,
 				Ticket:     wire,
 			})
+			total++
 		}
 		out.Chunks = append(out.Chunks, dc)
 	}
 	return out, nil
+}
+
+func pickDownloadPlacements(all []store.DownloadPlacement, need int) []store.DownloadPlacement {
+	var online, rest []store.DownloadPlacement
+	for _, p := range all {
+		if p.Node.Status == "online" {
+			online = append(online, p)
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	if len(online) >= need {
+		return online
+	}
+	return append(online, rest...)
 }
 
 // SignTicketFromSigner adapts tickets.Signer.

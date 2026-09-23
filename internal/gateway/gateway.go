@@ -143,6 +143,18 @@ func (s *Server) with(kind authKind, next http.HandlerFunc) http.HandlerFunc {
 		case authKey, authKeyWrite:
 			id, err := s.authenticateKey(ctx, r)
 			if err != nil {
+				if s.limit != nil {
+					res, lerr := s.limit.AllowAuth(ctx, clientIP(r))
+					if lerr != nil {
+						apierr.Write(w, apierr.CodeInternal, "internal error", rid)
+						return
+					}
+					if !res.Allowed {
+						w.Header().Set("Retry-After", formatRetry(res.RetryAfter))
+						apierr.Write(w, apierr.CodeRateLimited, "rate limited", rid)
+						return
+					}
+				}
 				s.writeMeta(w, r, err)
 				return
 			}

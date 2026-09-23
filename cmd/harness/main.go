@@ -242,7 +242,19 @@ func cmdM4(args []string) error {
 	if err := compose(append([]string{"kill"}, names...)...).Run(); err != nil {
 		return err
 	}
-	fmt.Println("- Download during failure: run `dsp get` now (not waited by harness)")
+	downloadOK := false
+	if cmd := os.Getenv("DSP_GET_CMD"); cmd != "" {
+		c := exec.Command("sh", "-c", cmd)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		downloadOK = c.Run() == nil
+		fmt.Println("- Download during failure:", downloadOK)
+		if !downloadOK {
+			return fmt.Errorf("dsp get during failure failed")
+		}
+	} else {
+		fmt.Println("- Download during failure: set DSP_GET_CMD to assert (required for chaos-m4 CI)")
+	}
 	deadline := time.Now().Add(10 * time.Minute)
 	var final map[uuid.UUID]int
 	for time.Now().Before(deadline) {

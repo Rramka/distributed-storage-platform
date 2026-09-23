@@ -5,11 +5,14 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -88,17 +91,24 @@ func register(ctx context.Context, cfg Config, priv ed25519.PrivateKey) (identit
 		"hostname_label":    cfg.HostnameLabel,
 		"capacity_bytes":    capacityBytes(cfg),
 	})
+	cl, err := registerClient(cfg)
+	if err != nil {
+		return identity{}, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.RegisterURL+"/internal/nodes/register", bytes.NewReader(body))
 	if err != nil {
 		return identity{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := cl.Do(req)
 	if err != nil {
 		return identity{}, fmt.Errorf("agent.register: %w", err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return identity{}, fmt.Errorf("agent.register: %w", err)
+	}
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		return identity{}, fmt.Errorf("agent.register: http %d %s", resp.StatusCode, raw)
 	}
@@ -115,6 +125,35 @@ func register(ctx context.Context, cfg Config, priv ed25519.PrivateKey) (identit
 		return identity{}, err
 	}
 	return identity{ID: id, Priv: priv, Cert: certPEM}, nil
+}
+
+func registerClient(cfg Config) (*http.Client, error) {
+	u, err := url.Parse(cfg.RegisterURL)
+	if err != nil {
+		return nil, fmt.Errorf("agent.register: %w", err)
+	}
+	if u.Scheme != "https" {
+		return nil, fmt.Errorf("agent.register: REGISTER_URL must be https")
+	}
+	if cfg.CAFile == "" {
+		return nil, fmt.Errorf("agent.register: CA_FILE required for TLS registration")
+	}
+	cacert, err := loadCACert(cfg.CAFile)
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(cacert)
+	return &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS13,
+				RootCAs:    pool,
+				ServerName: u.Hostname(),
+			},
+		},
+	}, nil
 }
 
 func waitForCode(path string, timeout time.Duration) (string, error) {

@@ -51,7 +51,7 @@ func (s *StoreService) ListNodes(ctx context.Context, userID uuid.UUID) ([]store
 	return s.Store.ListNodesByOwner(ctx, userID)
 }
 
-// RegisterNode consumes a code, issues a cert, and inserts the node.
+// RegisterNode consumes a code, issues a cert, and inserts the node atomically.
 func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte, endpoint, osName, version, label string, capacity int64) (store.Node, string, error) {
 	if s.IssueNode == nil {
 		return store.Node{}, "", fmt.Errorf("metadata.registerNode: CA not configured")
@@ -70,6 +70,7 @@ func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte
 	if time.Now().After(rc.ExpiresAt) {
 		return store.Node{}, "", ErrNotFound
 	}
+	_ = endpoint
 	nodeID := uuid.New()
 	certPEM, pub, fp, expires, err := s.IssueNode(csr, nodeID, rc.Endpoint)
 	if err != nil {
@@ -84,9 +85,8 @@ func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte
 	if capacity <= 0 {
 		capacity = 10 << 30
 	}
-	n, err := s.Store.CreateNode(ctx, store.CreateNodeParams{
+	n, err := s.Store.RegisterNode(ctx, hashed, store.CreateNodeParams{
 		ID:              nodeID,
-		OwnerID:         rc.OwnerID,
 		CertFingerprint: fp,
 		PublicKey:       pub,
 		CertPEM:         string(certPEM),
@@ -94,16 +94,9 @@ func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte
 		HostnameLabel:   label,
 		OS:              osName,
 		AgentVersion:    version,
-		Country:         rc.Country,
-		Region:          rc.Region,
-		ASN:             rc.ASN,
-		Endpoint:        rc.Endpoint,
 		CapacityBytes:   capacity,
 	})
 	if err != nil {
-		return store.Node{}, "", err
-	}
-	if _, err := s.Store.ConsumeRegistrationCode(ctx, hashed, n.ID); err != nil {
 		if err == store.ErrConflict {
 			return store.Node{}, "", ErrConflict
 		}

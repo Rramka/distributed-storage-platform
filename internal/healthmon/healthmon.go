@@ -53,7 +53,9 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		MemUsedRatio      float64 `json:"mem_used_ratio"`
 		DiskReadLatencyMS float64 `json:"disk_read_latency_ms"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.Warn("healthmon heartbeat decode", "err", err, "node_id", node.ID)
+	}
 	if req.NodeID != "" {
 		id, err := uuid.Parse(req.NodeID)
 		if err == nil && id != node.ID {
@@ -66,15 +68,19 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, apierr.CodeInternal, "internal error", apierr.NewRequestID())
 		return
 	}
-	_ = s.Redis.HSet(r.Context(), "node:metrics:"+node.ID.String(), map[string]any{
+	if err := s.Redis.HSet(r.Context(), "node:metrics:"+node.ID.String(), map[string]any{
 		"free_bytes":           req.FreeBytes,
 		"used_bytes":           req.UsedBytes,
 		"cpu_load":             req.CPULoad,
 		"mem_used_ratio":       req.MemUsedRatio,
 		"disk_read_latency_ms": req.DiskReadLatencyMS,
 		"fragment_count":       req.FragmentCount,
-	}).Err()
-	_ = s.Redis.Expire(r.Context(), "node:metrics:"+node.ID.String(), 2*time.Minute).Err()
+	}).Err(); err != nil {
+		slog.Error("healthmon metrics hset", "err", err, "node_id", node.ID)
+	}
+	if err := s.Redis.Expire(r.Context(), "node:metrics:"+node.ID.String(), 2*time.Minute).Err(); err != nil {
+		slog.Error("healthmon metrics expire", "err", err, "node_id", node.ID)
+	}
 	from, to, err := s.Store.TouchNodeStatus(r.Context(), node.ID, req.UsedBytes, node.CapacityBytes)
 	if err != nil {
 		slog.Error("healthmon touch", "err", err)

@@ -33,6 +33,8 @@ W12: `make demo` writes `business/updates/demo-metrics-YYYY-MM-DD.json`. Static 
 
 W13: `harness partition` (`docker compose pause`, not iptables) with a ≥ 13/16 floor while a region is cut. `throttle` retired (neutral `bandwidth_factor`). CI `test` job is `-short`; `invariants` job runs `go test ./...` against Postgres. Nightly runs partition + a 20-minute soak.
 
+W14: node registration is server-authenticated TLS (`:8444`); one registration code yields one node row; DELETE tickets are single-use; `make demo-ready` + `harness m4` assert `dsp get` while six holders are down. Docs match HTTP/JSON + binary tickets.
+
 ## After MVP
 
 [[Long-term Vision]]: S3 + payments → file sync / block storage → containers / serverless → GPU / VMs / K8s. Each phase reuses the storage network, [[Reputation]], and ledger rails.

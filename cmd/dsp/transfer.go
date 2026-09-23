@@ -200,8 +200,12 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 	var receipts []string
 	okPerChunk := map[int]int{}
 	var mu sync.Mutex
+	var firstPutErr error
+	putFails := 0
 	sem := make(chan struct{}, 16)
 	var wg sync.WaitGroup
+	putCtx, putCancel := context.WithCancel(context.Background())
+	defer putCancel()
 	for _, p := range plan.Placements {
 		p := p
 		data := byKey[shardKey{seq: p.ChunkSeq, index: p.ShardIndex}]
@@ -210,8 +214,14 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			rec, err := putFragment(caCert, p.Endpoint, p.NodeID, p.FragmentID, p.Ticket, data)
+			rec, err := putFragment(putCtx, caCert, p.Endpoint, p.NodeID, p.FragmentID, p.Ticket, data)
 			if err != nil {
+				mu.Lock()
+				putFails++
+				if firstPutErr == nil {
+					firstPutErr = err
+				}
+				mu.Unlock()
 				return
 			}
 			mu.Lock()
@@ -223,8 +233,14 @@ func cmdPut(args []string, stdout, stderr io.Writer, c *client, getenv getenvFun
 	wg.Wait()
 	for _, ch := range chunks {
 		if okPerChunk[ch.info.Seq] < store.CommitThreshold {
+			if firstPutErr != nil {
+				return fmt.Errorf("chunk %d: %d fragments stored, need %d (%d put errors: %w)", ch.info.Seq, okPerChunk[ch.info.Seq], store.CommitThreshold, putFails, firstPutErr)
+			}
 			return fmt.Errorf("chunk %d: %d fragments stored, need %d", ch.info.Seq, okPerChunk[ch.info.Seq], store.CommitThreshold)
 		}
+	}
+	if firstPutErr != nil {
+		fmt.Fprintf(stderr, "dsp put: %d fragment puts failed (continuing; first: %v)\n", putFails, firstPutErr)
 	}
 	_, raw, err = c.do(http.MethodPost, "/v1/upload/"+plan.UploadID+"/commit", map[string]any{"receipts": receipts}, false)
 	if err != nil {
@@ -466,7 +482,7 @@ func fetchChunk(caCert *x509.Certificate, seq int, chunkSHA string, sizeBytes in
 	return chunk, nil
 }
 
-func putFragment(caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string, data []byte) (string, error) {
+func putFragment(ctx context.Context, caCert *x509.Certificate, endpoint, nodeID, fragID, ticket string, data []byte) (string, error) {
 	nid, err := uuid.Parse(nodeID)
 	if err != nil {
 		return "", err
@@ -479,7 +495,7 @@ func putFragment(caCert *x509.Certificate, endpoint, nodeID, fragID, ticket stri
 		Timeout:   2 * time.Minute,
 		Transport: &http.Transport{TLSClientConfig: agent.ClientTLS(caCert, nid, host)},
 	}
-	req, err := http.NewRequest(http.MethodPut, "https://"+endpoint+"/fragments/"+fragID, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, "https://"+endpoint+"/fragments/"+fragID, bytes.NewReader(data))
 	if err != nil {
 		return "", err
 	}

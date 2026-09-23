@@ -116,7 +116,10 @@ func (s *Store) BeginUpload(ctx context.Context, ownerID uuid.UUID, m UploadMani
 		if err != nil && err != pgx.ErrNoRows {
 			return PlannedUpload{}, mapQueryErr("store.beginUpload", err)
 		}
-		return PlannedUpload{}, ErrConflict
+		if err == nil {
+			return PlannedUpload{}, ErrConflict
+		}
+		// uploading file with no pending version (aborted plan) — start a new version
 	}
 
 	if !exists {
@@ -135,7 +138,8 @@ func (s *Store) BeginUpload(ctx context.Context, ownerID uuid.UUID, m UploadMani
 		INSERT INTO file_versions (
 			file_id, version_no, size_bytes, content_sha256, encryption_meta,
 			chunk_size, ec_data_shards, ec_parity_shards, status
-		) VALUES ($1, 1, $2, $3, $4, $5, $6, $7, 'pending')
+		) VALUES ($1, (SELECT COALESCE(MAX(version_no), 0) + 1 FROM file_versions WHERE file_id = $1),
+		          $2, $3, $4, $5, $6, $7, 'pending')
 		RETURNING id, file_id, version_no, size_bytes, content_sha256, encryption_meta, chunk_size,
 		          ec_data_shards, ec_parity_shards, status, created_at, committed_at
 	`, f.ID, m.SizeBytes, m.ContentSHA256, []byte(m.EncryptionMeta), m.ChunkSize, m.ECData, m.ECParity).Scan(
@@ -177,6 +181,50 @@ func (s *Store) BeginUpload(ctx context.Context, ownerID uuid.UUID, m UploadMani
 		return PlannedUpload{}, mapQueryErr("store.beginUpload", err)
 	}
 	return out, nil
+}
+
+// AbortUpload drops pending placements and marks the version aborted when
+// nothing has been stored (failed PlanUpload compensator).
+func (s *Store) AbortUpload(ctx context.Context, versionID uuid.UUID) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return mapQueryErr("store.abortUpload", err)
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `
+		DELETE FROM fragment_placements
+		WHERE status = 'pending' AND fragment_id IN (
+			SELECT fr.id FROM fragments fr
+			JOIN chunks c ON c.id = fr.chunk_id
+			WHERE c.version_id = $1
+		)
+	`, versionID)
+	if err != nil {
+		return mapQueryErr("store.abortUpload", err)
+	}
+	var stored int
+	err = tx.QueryRow(ctx, `
+		SELECT count(*) FROM fragment_placements p
+		JOIN fragments fr ON fr.id = p.fragment_id
+		JOIN chunks c ON c.id = fr.chunk_id
+		WHERE c.version_id = $1 AND p.status = 'stored'
+	`, versionID).Scan(&stored)
+	if err != nil {
+		return mapQueryErr("store.abortUpload", err)
+	}
+	if stored > 0 {
+		return tx.Commit(ctx)
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE file_versions SET status = 'aborted' WHERE id = $1 AND status = 'pending'
+	`, versionID)
+	if err != nil {
+		return mapQueryErr("store.abortUpload", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return mapQueryErr("store.abortUpload", err)
+	}
+	return nil
 }
 
 func loadPlanned(ctx context.Context, q queryer, f File, v FileVersion, resume bool) (PlannedUpload, error) {

@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"log/slog"
 	"net"
@@ -27,17 +28,7 @@ func ListenAndServe(service, addr string, handler http.Handler) error {
 		handler = NewMux(service)
 	}
 
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		BaseContext: func(_ net.Listener) context.Context {
-			return context.Background()
-		},
-	}
+	srv := NewServer(addr, handler)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -67,9 +58,39 @@ func ListenAndServe(service, addr string, handler http.Handler) error {
 	}
 }
 
+// NewServer builds an HTTP server with the project timeouts.
+func NewServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		BaseContext: func(_ net.Listener) context.Context {
+			return context.Background()
+		},
+	}
+}
+
+// NewTLSServer is NewServer plus a TLS config (certificates live on cfg).
+func NewTLSServer(addr string, handler http.Handler, cfg *tls.Config) *http.Server {
+	srv := NewServer(addr, handler)
+	srv.TLSConfig = cfg
+	return srv
+}
+
 // AddrFromEnv reads HTTP_ADDR or returns fallback (":8080" style).
 func AddrFromEnv(fallback string) string {
 	if v := os.Getenv("HTTP_ADDR"); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// NodeAPIAddrFromEnv reads NODE_API_ADDR or returns fallback (":8444" style).
+func NodeAPIAddrFromEnv(fallback string) string {
+	if v := os.Getenv("NODE_API_ADDR"); v != "" {
 		return v
 	}
 	return fallback

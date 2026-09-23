@@ -2,6 +2,8 @@
 **/.DS_Store
 /bin/
 /dist/
+/harness
+/fleet-seed
 *.exe
 coverage.out
 .env

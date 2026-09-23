@@ -3,7 +3,7 @@
 Three API surfaces exist in Phase 1:
 
 1. **Customer REST API** — public, JSON over HTTPS, served by the API Gateway. This is what the CLI, SDK, dashboard, and customers' own integrations use.
-2. **Node control API** — gRPC over mTLS between Node Agents and the control plane (registration, heartbeats, challenges). Summarized here; message details in [05-node-agent.md](05-node-agent.md).
+2. **Node control API** — HTTP/JSON over TLS between Node Agents and the control plane (registration on server-authenticated TLS; heartbeats and challenges on mTLS). Summarized here; message details in [05-node-agent.md](05-node-agent.md). gRPC is deferred past M4.
 3. **Node fragment API** — HTTPS on each storage node, authorized by tickets ([07-security.md](07-security.md)). Listed here for completeness.
 
 ## Conventions
@@ -150,7 +150,7 @@ Solo track: HTTP/JSON, not gRPC (gRPC is deferred past M4). Heartbeats are reque
 
 | HTTP | Direction | Purpose |
 |---|---|---|
-| `POST /internal/nodes/register` | agent → metadata | Identity ceremony (CSR + registration code); returns signed certificate + node ID |
+| `POST /internal/nodes/register` | agent → metadata `:8444` | Identity ceremony over server-authenticated TLS (CSR + one-time code); returns signed certificate + node ID |
 | `POST /internal/heartbeat` | agent → healthmon | Agent sends heartbeats every 10 s over mTLS; platform returns `{ "messages": [] }` |
 | ConfirmDeletions / ReconcileInventory / RenewCertificate | — | M4+ |
 

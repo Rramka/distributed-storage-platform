@@ -340,6 +340,22 @@ func TestAuthRateLimit(t *testing.T) {
 	}
 }
 
+func TestFailedAPIKeyRateLimit(t *testing.T) {
+	t.Parallel()
+	h := testServer(t, newFake())
+	bogus, err := auth.MintAPIKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var last *httptest.ResponseRecorder
+	for i := 0; i < ratelimit.AuthLimit+1; i++ {
+		last = doJSON(t, h, http.MethodGet, "/v1/buckets", "", bogus.Secret, "198.51.100.9")
+	}
+	if last.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d body %s", last.Code, last.Body.String())
+	}
+}
+
 func TestHealth(t *testing.T) {
 	t.Parallel()
 	h := testServer(t, newFake())

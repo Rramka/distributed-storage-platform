@@ -19,7 +19,7 @@ If implementation must diverge from a spec, **change the spec in the same change
 
 - **Language:** Go 1.26. Module path: `github.com/Rramka/distributed-storage-platform`
 - **Public API:** REST/JSON (gateway)
-- **Internal RPC:** gRPC + protobuf (when proto exists)
+- **Internal RPC:** HTTP/JSON (gRPC + protobuf deferred past M4)
 - **State:** Postgres (metadata), Redis (liveness/TTL), NATS JetStream (events, repair queue)
 - **Crypto / coding:** AES-256-GCM streaming, Argon2id, Reed–Solomon 10+6 (`klauspost/reedsolomon`)
 - **Node identity:** mTLS with a private CA

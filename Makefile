@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f deploy/compose/docker-compose.yml
 
-.PHONY: up down ps logs test test-short vet fmt migrate migrate-url build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4 chaos-partition demo invariants soak
+.PHONY: up down ps logs test test-short vet fmt migrate migrate-url build fleet-up fleet-down fleet-seed fleet-kill6 chaos-m4 chaos-partition demo demo-ready invariants soak
 
 up:
 	$(COMPOSE) up -d --wait postgres
@@ -24,7 +24,12 @@ fleet-kill6:
 	go run ./cmd/harness kill -n 6
 
 chaos-m4:
+	@if [ -f .local/demo.env ]; then set -a; . ./.local/demo.env; set +a; fi; \
 	go run ./cmd/harness m4
+
+demo-ready:
+	@chmod +x scripts/demo-ready.sh
+	./scripts/demo-ready.sh
 
 chaos-partition:
 	go run ./cmd/harness partition --region $${REGION:-eu-west} --for $${DURATION:-8m} --heal
@@ -50,7 +55,8 @@ logs:
 	$(COMPOSE) logs -f --tail=100
 
 build:
-	go build ./...
+	@mkdir -p bin
+	go build -o bin/ ./...
 
 test:
 	go test ./...

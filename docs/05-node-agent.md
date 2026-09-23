@@ -69,23 +69,25 @@ Rules of enforcement:
 
 ## Heartbeat protocol
 
-The agent holds a long-lived gRPC stream to the Health Monitor over mTLS and sends a heartbeat **every 10 seconds**:
+The agent POSTs **HTTP/JSON** to `POST /internal/heartbeat` on the Health Monitor over mTLS **every 10 seconds** (gRPC stream deferred past M4):
 
-```protobuf
-message Heartbeat {
-  string  node_id = 1;
-  int64   free_bytes = 2;         // within the configured cap
-  int64   used_bytes = 3;
-  double  cpu_load = 4;
-  double  mem_used_ratio = 5;
-  uint32  fragment_count = 6;
-  string  agent_version = 7;
-  double  disk_read_latency_ms = 8;   // rolling p95 from real fragment reads
-  optional double disk_temp_c = 9;    // SMART, when available
+```json
+{
+  "node_id": "…",
+  "free_bytes": 0,
+  "used_bytes": 0,
+  "capacity_bytes": 0,
+  "fragment_count": 0,
+  "agent_version": "…",
+  "cpu_load": 0.0,
+  "mem_used_ratio": 0.0,
+  "disk_read_latency_ms": 0.0
 }
 ```
 
-Liveness semantics live on the server side ([02-system-architecture.md](02-system-architecture.md)): 3 missed heartbeats → `suspect` (no new placements), 5 minutes silent → `offline` (repair evaluation begins). The stream also carries control messages *to* the agent: expiry lists, audit challenges, drain orders, and update notices — so the agent needs **no open inbound port for control traffic**, only the fragment API port for data.
+`cpu_load` is a coarse proxy (`NumGoroutine / GOMAXPROCS / 8`), not host CPU; scoring does not consume it on the solo track. `disk_temp_c` is not sent.
+
+Liveness semantics live on the server side ([02-system-architecture.md](02-system-architecture.md)): 3 missed heartbeats → `suspect` (no new placements), 5 minutes silent → `offline` (repair evaluation begins). The response may carry control messages *to* the agent (expiry lists, drain orders); the solo-track body is `{"messages":[]}` — challenges are pulled via `GET /challenge` instead. The agent still needs **no open inbound port for control traffic**, only the fragment API port for data.
 
 Nodes that cannot accept inbound connections at all (strict NAT) are out of scope for the MVP; the registration flow tests reachability and rejects unreachable endpoints with guidance (port forwarding/UPnP). Relay traversal is a post-MVP feature.
 

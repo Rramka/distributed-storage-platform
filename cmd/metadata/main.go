@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/Rramka/distributed-storage-platform/internal/ca"
@@ -27,6 +29,7 @@ func main() {
 	defer st.Close()
 
 	svc := &metadata.StoreService{Store: st}
+	var platformCA *ca.CA
 	if dir := os.Getenv("CA_DIR"); dir != "" {
 		c, err := ca.EnsureCA(dir)
 		if err != nil {
@@ -34,6 +37,7 @@ func main() {
 			os.Exit(1)
 		}
 		svc.IssueNode = metadata.IssueNodeFromCA(c)
+		platformCA = c
 	}
 	if seed := os.Getenv("TICKET_SIGNING_SEED"); seed != "" {
 		raw, err := tickets.ParseSeed(seed)
@@ -73,6 +77,26 @@ func main() {
 	metadata.MountRepair(mux, svc)
 	metadata.MountChallenges(mux, svc)
 	metadata.MountDemo(mux, svc)
+
+	if platformCA != nil {
+		cert, err := platformCA.EnsureServiceCert(os.Getenv("CA_DIR"), "metadata")
+		if err != nil {
+			slog.Error("metadata cert", "err", err)
+			os.Exit(1)
+		}
+		nodeMux := httpserver.NewMux("metadata-node")
+		metadata.MountNode(nodeMux, svc)
+		nodeAddr := httpserver.NodeAPIAddrFromEnv(":8444")
+		nodeSrv := httpserver.NewTLSServer(nodeAddr, nodeMux, platformCA.ServerTLSConfig(cert, false))
+		go func() {
+			slog.Info("metadata node TLS listening", "addr", nodeAddr)
+			if err := nodeSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("metadata node TLS", "err", err)
+				os.Exit(1)
+			}
+		}()
+	}
+
 	if err := httpserver.ListenAndServe("metadata", httpserver.AddrFromEnv(":8081"), mux); err != nil {
 		slog.Error("metadata exited", "err", err)
 		os.Exit(1)

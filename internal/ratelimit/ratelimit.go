@@ -14,7 +14,7 @@ const (
 	AuthLimit = 10
 	// ReadLimit is 600 metadata reads per minute per account.
 	ReadLimit = 600
-	// PlanLimit is 60 upload/download plans per minute per account (unused until M2).
+	// PlanLimit is 60 upload/download plans per minute per account.
 	PlanLimit = 60
 )
 

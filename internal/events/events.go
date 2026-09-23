@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -200,10 +201,14 @@ func (b *Bus) Consume(ctx context.Context, stream, durable, filter string, h Han
 	}
 	cc, err := cons.Consume(func(msg jetstream.Msg) {
 		if err := h(ctx, msg.Subject(), msg.Data()); err != nil {
-			_ = msg.Nak()
+			if nerr := msg.Nak(); nerr != nil {
+				slog.Error("events nak", "err", nerr, "subject", msg.Subject())
+			}
 			return
 		}
-		_ = msg.Ack()
+		if err := msg.Ack(); err != nil {
+			slog.Error("events ack", "err", err, "subject", msg.Subject())
+		}
 	})
 	if err != nil {
 		return fmt.Errorf("events.consume: %w", err)
