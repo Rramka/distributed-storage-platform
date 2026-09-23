@@ -39,6 +39,8 @@ MVP weights: w_cap 0.20, w_up 0.30, w_rep 0.30, w_lat 0.10, w_bw 0.10
 
 New nodes start at 0.5 and are capped to a **probation quota** (limited placements) until they accumulate 14 days of history — so an attacker cannot spin up a thousand fresh nodes and immediately attract meaningful data.
 
+The same scalar is mapped to a **reputation_factor** for billing: `0.8 + 0.4 * reputation`, so a brand-new node (0.5) earns at 1.0× and a long-lived clean node (1.0) earns the 1.2× premium. See [09-billing-ledger.md](09-billing-ledger.md).
+
 ### Placement constraints (hard rules, checked before scoring)
 
 For the 16 fragments of any single chunk:

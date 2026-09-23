@@ -491,7 +491,7 @@ func (s *Store) LoadDownload(ctx context.Context, ownerID, fileID uuid.UUID) (Fi
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.id, c.version_id, c.seq, c.size_bytes, c.sha256,
 		       fr.id, fr.chunk_id, fr.shard_index, fr.size_bytes, fr.sha256,
-		       n.id, n.endpoint, n.status
+		       n.id, n.endpoint, n.status, n.revoked_at
 		FROM chunks c
 		JOIN fragments fr ON fr.chunk_id = c.id
 		JOIN fragment_placements p ON p.fragment_id = fr.id AND p.status = 'stored'
@@ -512,7 +512,7 @@ func (s *Store) LoadDownload(ctx context.Context, ownerID, fileID uuid.UUID) (Fi
 		if err := rows.Scan(
 			&ch.ID, &ch.VersionID, &ch.Seq, &ch.SizeBytes, &ch.SHA256,
 			&fr.ID, &fr.ChunkID, &fr.ShardIndex, &fr.SizeBytes, &fr.SHA256,
-			&node.ID, &node.Endpoint, &node.Status,
+			&node.ID, &node.Endpoint, &node.Status, &node.RevokedAt,
 		); err != nil {
 			return File{}, FileVersion{}, nil, mapQueryErr("store.loadDownload", err)
 		}

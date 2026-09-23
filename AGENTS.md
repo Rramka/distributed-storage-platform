@@ -48,7 +48,7 @@ Health checks after `make up`:
 
 ## Scope you must not expand
 
-Do **not** implement until the M5 exit (balanced books) is recorded:
+Do **not** implement (M5 exit is recorded; these stay deferred by choice):
 
 - customer, provider, or admin dashboards (fleet visualizer is the only UI)
 - JWT / refresh tokens (API keys only)
@@ -57,7 +57,6 @@ Do **not** implement until the M5 exit (balanced books) is recorded:
 - reputation beyond a scalar
 - S3 compatibility
 - real money movement
-- monthly statements and quota enforcement (M5b)
 
 ## Definition of done
 

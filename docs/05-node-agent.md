@@ -87,7 +87,7 @@ The agent POSTs **HTTP/JSON** to `POST /internal/heartbeat` on the Health Monito
 
 `cpu_load` is a coarse proxy (`NumGoroutine / GOMAXPROCS / 8`), not host CPU; scoring does not consume it on the solo track. `disk_temp_c` is not sent.
 
-Liveness semantics live on the server side ([02-system-architecture.md](02-system-architecture.md)): 3 missed heartbeats → `suspect` (no new placements), 5 minutes silent → `offline` (repair evaluation begins). The response may carry control messages *to* the agent (expiry lists, drain orders); the solo-track body is `{"messages":[]}` — challenges are pulled via `GET /challenge` instead. The agent still needs **no open inbound port for control traffic**, only the fragment API port for data.
+Liveness semantics live on the server side ([02-system-architecture.md](02-system-architecture.md)): 3 missed heartbeats → `suspect` (no new placements), 5 minutes silent → `offline` (repair evaluation begins). The response may carry control messages *to* the agent (`renew`, `scrub`; later expiry lists and drain orders). Challenges are pulled via `GET /challenge`. The agent still needs **no open inbound port for control traffic**, only the fragment API port for data.
 
 Nodes that cannot accept inbound connections at all (strict NAT) are out of scope for the MVP; the registration flow tests reachability and rejects unreachable endpoints with guidance (port forwarding/UPnP). Relay traversal is a post-MVP feature.
 

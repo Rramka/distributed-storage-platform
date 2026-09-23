@@ -70,7 +70,9 @@ func main() {
 	}()
 
 	mux := http.NewServeMux()
-	healthmon.Mount(mux, &healthmon.Server{Store: st, Redis: rdb, Bus: bus})
+	hm := &healthmon.Server{Store: st, Redis: rdb, Bus: bus}
+	healthmon.Mount(mux, hm)
+	healthmon.MountScrub(mux, hm)
 	suspect, offline := healthmon.DurationsFromEnv()
 	mon := &healthmon.Monitor{
 		Store:        st,

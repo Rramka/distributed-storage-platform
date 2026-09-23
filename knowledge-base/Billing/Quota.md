@@ -8,7 +8,7 @@ aliases:
 
 # Quota
 
-Specified for Phase 1, **deferred to M5b**. Customers will have a credit floor. At the floor:
+M5b. Customers have a credit floor (`LEDGER_CREDIT_FLOOR_UCRD`, default 0). At the floor:
 
 - **Uploads blocked** (`403 quota_exceeded`)
 - **Downloads and [[File Deletion]] remain available** — data is never held hostage over billing

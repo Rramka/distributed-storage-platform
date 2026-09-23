@@ -21,6 +21,7 @@ var (
 	ErrInvalid     = errors.New("store: invalid request")
 	ErrIncomplete  = errors.New("store: incomplete placements")
 	ErrUnavailable = errors.New("store: placement unavailable")
+	ErrNodeDenied  = errors.New("store: node denied")
 )
 
 // CommitThreshold is the per-chunk stored-placement count required to commit
@@ -144,6 +145,7 @@ type Node struct {
 	LastSeenAt          *time.Time `json:"last_seen_at,omitempty"`
 	ProbationUntil      *time.Time `json:"probation_until,omitempty"`
 	ReputationUpdatedAt *time.Time `json:"reputation_updated_at,omitempty"`
+	RevokedAt           *time.Time `json:"revoked_at,omitempty"`
 	UptimeRatio         float32    `json:"-"`
 	LatencyMS           float32    `json:"-"`
 	CPULoad             float32    `json:"-"`

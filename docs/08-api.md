@@ -146,7 +146,7 @@ Client submits node-signed GET receipts collected from `X-DSP-Receipt` response 
 | `GET /demo/fleet` | **Demo only** (`DEMO_MODE=1`): fleet-wide nodes + per-chunk healthy counts. Unauthenticated. Not present in a normal deployment. The visualizer at `GET /demo/` polls this. |
 | `GET /nodes/{id}/stats?from=&to=` | Hourly rollups: uptime, audits, bytes served/ingested. |
 | `POST /nodes/{id}/drain` | Graceful retirement — migrate data off, no reputation penalty. |
-| `GET /earnings` | Provider ledger view: accrued credits by node, window, and type. |
+| `GET /earnings?from=&to=` | Provider ledger view: accrued credits by node, window, and type (`storage_earning`, `egress_earning`). Optional RFC3339 `from`/`to` filter the window breakdown. |
 
 ## Node control API (HTTP/JSON over mTLS)
 
@@ -156,7 +156,8 @@ Solo track: HTTP/JSON, not gRPC (gRPC is deferred past M4). Heartbeats are reque
 |---|---|---|
 | `POST /internal/nodes/register` | agent → metadata `:8444` | Identity ceremony over server-authenticated TLS (CSR + one-time code); returns signed certificate + node ID |
 | `POST /internal/heartbeat` | agent → healthmon | Agent sends heartbeats every 10 s over mTLS; platform returns `{ "messages": [] }` |
-| ConfirmDeletions / ReconcileInventory / RenewCertificate | — | M4+ |
+| ConfirmDeletions / ReconcileInventory | — | M4+ (deletions go through the repair reaper + DELETE tickets) |
+| `POST /internal/nodes/renew` | agent → metadata `:8444` (optional client cert) | Re-issue a 30-day leaf for the same `public_key`. Heartbeat / ticket paths reject `revoked_at`, `quarantined`, or expired fingerprints. |
 
 ## Node fragment API (HTTPS on each node, data plane)
 

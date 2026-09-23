@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/google/uuid"
@@ -38,5 +39,16 @@ func TestPickDownloadPlacementsFallsBackToOffline(t *testing.T) {
 	}
 	if online != 3 {
 		t.Fatalf("online %d", online)
+	}
+}
+
+func TestPickDownloadPlacementsSkipsRevoked(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	revoked := store.DownloadPlacement{Node: store.Node{ID: uuid.New(), Status: "online", RevokedAt: &now}}
+	ok := store.DownloadPlacement{Node: store.Node{ID: uuid.New(), Status: "online"}}
+	got := pickDownloadPlacements([]store.DownloadPlacement{revoked, ok}, 1)
+	if len(got) != 1 || got[0].Node.ID != ok.Node.ID {
+		t.Fatalf("got %+v", got)
 	}
 }

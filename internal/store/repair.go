@@ -312,7 +312,7 @@ func (s *Store) FileHolders(ctx context.Context, fileID uuid.UUID) ([]Node, erro
 		SELECT DISTINCT n.id, n.owner_id, n.cert_fingerprint, n.public_key, n.cert_pem, n.cert_expires_at,
 			n.hostname_label, n.os, n.agent_version, n.country, n.region, n.asn, n.endpoint,
 			n.capacity_bytes, n.used_bytes, n.status, n.reputation, n.registered_at, n.last_seen_at,
-			n.probation_until, n.reputation_updated_at
+			n.probation_until, n.reputation_updated_at, n.revoked_at
 		FROM fragment_placements p
 		JOIN fragments fr ON fr.id = p.fragment_id
 		JOIN chunks c ON c.id = fr.chunk_id

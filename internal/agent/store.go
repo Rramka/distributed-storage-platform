@@ -197,6 +197,24 @@ func (s *ChunkStore) Delete(id uuid.UUID) error {
 	})
 }
 
+// Each visits every indexed fragment.
+func (s *ChunkStore) Each(fn func(id uuid.UUID, meta FragMeta) error) error {
+	return s.db.View(func(tx *bbolt.Tx) error {
+		return tx.Bucket(bktMeta).ForEach(func(k, v []byte) error {
+			if len(k) != 16 {
+				return nil
+			}
+			var id uuid.UUID
+			copy(id[:], k)
+			var m FragMeta
+			if err := json.Unmarshal(v, &m); err != nil {
+				return err
+			}
+			return fn(id, m)
+		})
+	})
+}
+
 // UsedBytes sums indexed sizes.
 func (s *ChunkStore) UsedBytes() (int64, int) {
 	var used int64

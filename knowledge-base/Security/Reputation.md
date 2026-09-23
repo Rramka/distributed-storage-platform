@@ -19,6 +19,6 @@ Score in [0, 1] on each [[Node]]. EWMA so recent behavior dominates. New nodes s
 | Honest scrub self-report | tiny decrease |
 | Graceful drain | no penalty |
 
-Used twice, on purpose: [[Scheduler]] placement weight (`w_rep` 0.30) and reliability multiplier `R` in [[Provider Earnings]]. Incentives point the same way.
+Used twice, on purpose: [[Scheduler]] placement weight (`w_rep` 0.30) and reliability multiplier `R` in [[Provider Earnings]] via `reputation_factor = 0.8 + 0.4 * reputation` (clean long-lived nodes earn up to 1.2×). Incentives point the same way.
 
 Related: [[Node Stats]], [[Placement Constraints]]

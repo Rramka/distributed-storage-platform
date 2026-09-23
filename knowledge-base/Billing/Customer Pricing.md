@@ -12,7 +12,7 @@ Phase 1 defaults, config-driven:
 
 | Item | Rate |
 |---|---|
-| Storage | 3.0 CRD / GB-month, accrued hourly (~4.1 µCRD / GB-hour) |
+| Storage | 3.0 CRD / GB-month, accrued hourly (3_000_000 / 730 ≈ 4109 µCRD / GB-hour) |
 | Download egress | 1.0 CRD / GB |
 | Upload | free |
 | API requests | free (rate-limited) |

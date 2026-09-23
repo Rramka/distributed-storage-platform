@@ -5,6 +5,7 @@ package invariants
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/scheduler"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
@@ -71,6 +72,29 @@ func CheckLedger(ctx context.Context, s *store.Store) error {
 	}
 	if -customer != provider+platform {
 		return fmt.Errorf("invariants.ledger: customer charges %d != provider %d + platform %d", -customer, provider, platform)
+	}
+	return CheckUsageReconcile(ctx, s)
+}
+
+// CheckUsageReconcile fails if archived egress events diverge from download_receipts
+// for the last complete UTC hour (and the current hour).
+func CheckUsageReconcile(ctx context.Context, s *store.Store) error {
+	now := time.Now().UTC().Truncate(time.Hour)
+	for _, w := range []time.Time{now.Add(-time.Hour), now} {
+		events, err := s.UsageEgressBytes(ctx, w)
+		if err != nil {
+			return err
+		}
+		receipts, err := s.ReceiptBytes(ctx, w)
+		if err != nil {
+			return err
+		}
+		if events == 0 {
+			continue
+		}
+		if events != receipts {
+			return fmt.Errorf("invariants.ledger: egress events %d != receipts %d for %s", events, receipts, w.Format(time.RFC3339))
+		}
 	}
 	return nil
 }

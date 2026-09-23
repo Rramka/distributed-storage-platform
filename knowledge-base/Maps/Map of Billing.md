@@ -19,12 +19,12 @@ Phase 1 is an **internal ledger**: real meters, real charges and earnings, **no 
 | Meter | Source | Used for |
 |---|---|---|
 | GB-hours stored (customer) | [[Metadata Service]] committed sizes | [[Customer Pricing]] |
-| Egress bytes (customer) | Download plans vs node transfer logs | [[Customer Pricing]] |
+| Egress bytes (customer) | Node-signed GET receipts (`POST /download/{id}/report`) | [[Customer Pricing]] |
 | GB-hours held (node) | `stored` [[Fragment Placement]]s | [[Provider Earnings]] |
 | Egress bytes served (node) | Node-signed transfer logs | [[Provider Earnings]] |
 | Uptime & audits (node) | [[Node Stats]] | reliability multiplier `R` |
 
-Events flow: sources → [[NATS JetStream]] usage stream → [[Ledger Service]] → [[Ledger Account]] / [[Ledger Entry]] in [[Postgres]].
+Accrual reads Postgres meters. Sources also emit [[Usage Event]]s onto [[NATS JetStream]] (`USAGE_EVENTS`) as an audit trail that the [[Ledger Service]] archives and reconciles.
 
 Upload (ingest) bandwidth is **free** in Phase 1 — it flows client → node and costs the platform nothing.
 

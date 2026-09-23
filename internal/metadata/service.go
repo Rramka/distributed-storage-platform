@@ -22,6 +22,7 @@ var (
 	ErrForbidden       = errors.New("metadata: forbidden")
 	ErrIncomplete      = store.ErrIncomplete
 	ErrUnavailable     = store.ErrUnavailable
+	ErrQuota           = errors.New("metadata: quota exceeded")
 )
 
 // Service is the metadata operations the gateway calls.
@@ -58,6 +59,7 @@ type StoreService struct {
 	IssueNode  func(csr []byte, nodeID uuid.UUID, endpoint string) (certPEM []byte, pub []byte, fp []byte, expires time.Time, err error)
 	SignTicket func(op string, fragmentID, nodeID uuid.UUID, sha []byte, maxBytes uint64) (string, time.Time, error)
 	Place      func(ctx context.Context, needs []PlaceNeed) ([]PlaceAssign, error)
+	QuotaCheck func(ctx context.Context, userID uuid.UUID) error
 }
 
 func (s *StoreService) CreateUser(ctx context.Context, email, password string) (store.User, error) {
@@ -119,7 +121,11 @@ func (s *StoreService) CreateAPIKey(ctx context.Context, userID uuid.UUID, keyHa
 	if label == "" {
 		return store.APIKey{}, ErrInvalid
 	}
-	return s.Store.CreateAPIKey(ctx, userID, keyHash, label, scopes, expiresAt)
+	k, err := s.Store.CreateAPIKey(ctx, userID, keyHash, label, scopes, expiresAt)
+	if err == nil {
+		_ = s.Store.InsertAudit(ctx, "user", &userID, "api_key.issue", "api_key", &k.ID, map[string]any{"label": label})
+	}
+	return k, err
 }
 
 func (s *StoreService) ListAPIKeys(ctx context.Context, userID uuid.UUID) ([]store.APIKey, error) {
@@ -127,7 +133,11 @@ func (s *StoreService) ListAPIKeys(ctx context.Context, userID uuid.UUID) ([]sto
 }
 
 func (s *StoreService) RevokeAPIKey(ctx context.Context, userID, keyID uuid.UUID) error {
-	return s.Store.RevokeAPIKey(ctx, userID, keyID)
+	err := s.Store.RevokeAPIKey(ctx, userID, keyID)
+	if err == nil {
+		_ = s.Store.InsertAudit(ctx, "user", &userID, "api_key.revoke", "api_key", &keyID, nil)
+	}
+	return err
 }
 
 func (s *StoreService) CreateBucket(ctx context.Context, userID uuid.UUID, name string) (store.Bucket, error) {
@@ -171,7 +181,11 @@ func (s *StoreService) RenameFile(ctx context.Context, userID, fileID uuid.UUID,
 }
 
 func (s *StoreService) DeleteFile(ctx context.Context, userID, fileID uuid.UUID) error {
-	return s.Store.SoftDeleteFile(ctx, userID, fileID)
+	err := s.Store.SoftDeleteFile(ctx, userID, fileID)
+	if err == nil {
+		_ = s.Store.InsertAudit(ctx, "user", &userID, "file.delete", "file", &fileID, nil)
+	}
+	return err
 }
 
 func (s *StoreService) ListNodeStats(ctx context.Context, userID, nodeID uuid.UUID, from, to time.Time) ([]store.NodeStats, error) {

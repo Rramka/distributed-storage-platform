@@ -252,11 +252,23 @@ CREATE TABLE ledger_entries (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE ledger_txns (
+    txn_id          UUID PRIMARY KEY,           -- idempotency key for PostTxn
+    kind            TEXT NOT NULL,
+    window_start    TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE ledger_watermarks (
+    name            TEXT PRIMARY KEY,
+    last_window     TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX ledger_by_account ON ledger_entries (account_id, created_at);
 CREATE INDEX ledger_by_txn ON ledger_entries (txn_id);
 
 CREATE TABLE usage_events (
-    id              TEXT PRIMARY KEY,           -- deterministic: usage:{kind}:{subject}:{window}
+    id              TEXT PRIMARY KEY,           -- usage:{kind}:{subject}:{window}[:nonce]
     kind            TEXT NOT NULL,              -- storage | egress | uptime
     subject_id      UUID,
     window_start    TIMESTAMPTZ,

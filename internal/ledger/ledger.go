@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ const (
 	TypeEgressCharge   = "egress_charge"
 	TypeStorageEarning = "storage_earning"
 	TypeEgressEarning  = "egress_earning"
+	TypeAdjustment     = "adjustment"
 )
 
 // Rates are Phase 1 defaults from docs/09, overridable via env.
@@ -97,19 +99,100 @@ type Entry struct {
 	Reference map[string]any
 }
 
-var errUnbalanced = fmt.Errorf("ledger: transaction does not sum to zero")
+var (
+	errUnbalanced       = fmt.Errorf("ledger: transaction does not sum to zero")
+	errAdjustmentReason = fmt.Errorf("ledger.adjustment: reason required")
+	ErrQuota            = fmt.Errorf("ledger: quota exceeded")
+)
+
+// CreditFloor is LEDGER_CREDIT_FLOOR_UCRD (default 0).
+func CreditFloor() int64 {
+	if v := os.Getenv("LEDGER_CREDIT_FLOOR_UCRD"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
+	}
+	return 0
+}
+
+// CheckQuota blocks new uploads when the customer balance is at or below the floor.
+func (l *Ledger) CheckQuota(ctx context.Context, userID uuid.UUID) error {
+	acct, err := l.Store.MustAccount(ctx, OwnerCustomer, ptr(userID), KindBalance)
+	if err != nil {
+		if err == store.ErrNoLedger {
+			return nil
+		}
+		return err
+	}
+	bal, err := l.Store.AccountBalance(ctx, acct.ID)
+	if err != nil {
+		return err
+	}
+	if bal <= CreditFloor() {
+		return ErrQuota
+	}
+	return nil
+}
+
+// CloseCycle snapshots every account for [start, end).
+func (l *Ledger) CloseCycle(ctx context.Context, start, end time.Time) error {
+	start = start.UTC()
+	end = end.UTC()
+	accts, err := l.Store.ListLedgerAccounts(ctx)
+	if err != nil {
+		return err
+	}
+	for _, a := range accts {
+		open, err := l.Store.AccountBalanceAt(ctx, a.ID, start)
+		if err != nil {
+			return err
+		}
+		closeBal, err := l.Store.AccountBalanceAt(ctx, a.ID, end)
+		if err != nil {
+			return err
+		}
+		var charges, earnings int64
+		switch a.Kind {
+		case KindBalance:
+			if closeBal < open {
+				charges = open - closeBal
+			}
+		case KindEarnings:
+			if closeBal > open {
+				earnings = closeBal - open
+			}
+		}
+		if err := l.Store.InsertStatement(ctx, store.Statement{
+			AccountID:    a.ID,
+			CycleStart:   start,
+			CycleEnd:     end,
+			OpeningUCRD:  open,
+			ClosingUCRD:  closeBal,
+			ChargesUCRD:  charges,
+			EarningsUCRD: earnings,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // PostTxn writes a balanced transaction. Duplicate txnID is a no-op.
 func (l *Ledger) PostTxn(ctx context.Context, txnID uuid.UUID, entries []Entry) error {
 	if err := SumZero(entries); err != nil {
 		return err
 	}
-	exists, err := l.Store.LedgerTxnExists(ctx, txnID)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return nil
+	kind := ""
+	var window *time.Time
+	if len(entries) > 0 {
+		kind = entries[0].Type
+		if w, ok := entries[0].Reference["window"]; ok {
+			switch t := w.(type) {
+			case time.Time:
+				u := t.UTC()
+				window = &u
+			}
+		}
 	}
 	rows := make([]store.LedgerEntry, 0, len(entries))
 	for _, e := range entries {
@@ -122,7 +205,26 @@ func (l *Ledger) PostTxn(ctx context.Context, txnID uuid.UUID, entries []Entry) 
 			Reference: ref,
 		})
 	}
-	return l.Store.InsertLedgerEntries(ctx, rows)
+	return l.Store.InsertLedgerTxn(ctx, txnID, kind, window, rows)
+}
+
+// PostAdjustment writes a balanced correction. Reason is required.
+func (l *Ledger) PostAdjustment(ctx context.Context, debit, credit uuid.UUID, amount int64, reason string) error {
+	if reason == "" {
+		return errAdjustmentReason
+	}
+	if amount <= 0 {
+		return fmt.Errorf("ledger.adjustment: amount must be positive")
+	}
+	ref := map[string]any{"reason": reason}
+	err := l.PostTxn(ctx, uuid.New(), []Entry{
+		{AccountID: debit, Amount: -amount, Type: TypeAdjustment, Reference: ref},
+		{AccountID: credit, Amount: amount, Type: TypeAdjustment, Reference: ref},
+	})
+	if err == nil {
+		_ = l.Store.InsertAudit(ctx, "service", nil, "ledger.adjustment", "ledger_account", &debit, map[string]any{"reason": reason, "amount": amount})
+	}
+	return err
 }
 
 // SumZero rejects a non-zero entry set.
@@ -174,16 +276,28 @@ func EgressEarningµCRD(bytes int64, rates Rates, reliabilityBP int64) int64 {
 	return base * reliabilityBP / 10000
 }
 
-// ReliabilityBP is R = uptime * audit * reputation, clamped to [0, 1.2], as 1/10000 units.
+// ReputationFactor maps the [0, 1] EWMA onto [0.8, 1.2].
+func ReputationFactor(reputation float32) float64 {
+	return float64(reputationFactorBP(reputation)) / 10000
+}
+
+func reputationFactorBP(reputation float32) int64 {
+	return 8000 + int64(float64(clamp01(reputation))*4000)
+}
+
+// ReliabilityBP is R = uptime * audit * reputation_factor, clamped to [0, 1.2], as 1/10000 units.
 func ReliabilityBP(uptime, audit, reputation float32) int64 {
-	r := float64(clamp01(uptime)) * float64(clamp01(audit)) * float64(clamp01(reputation))
-	if r > 1.2 {
-		r = 1.2
+	up := int64(float64(clamp01(uptime)) * 10000)
+	aud := int64(float64(clamp01(audit)) * 10000)
+	fac := reputationFactorBP(reputation)
+	r := up * aud / 10000 * fac / 10000
+	if r > 12000 {
+		r = 12000
 	}
 	if r < 0 {
 		r = 0
 	}
-	return int64(r * 10000)
+	return r
 }
 
 func clamp01(v float32) float32 {

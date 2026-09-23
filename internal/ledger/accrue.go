@@ -3,11 +3,14 @@ package ledger
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/google/uuid"
 )
+
+const maxCatchUpHours = 48
 
 // Clock returns the current time. Injected so the month test needs no sleeping.
 type Clock func() time.Time
@@ -17,6 +20,8 @@ type Accruer struct {
 	Ledger *Ledger
 	Clock  Clock
 	Meters Meters
+	Tick   time.Duration
+	Name   string
 }
 
 // Meters supplies billing inputs. Tests inject fakes; production uses StoreMeters.
@@ -183,21 +188,55 @@ func (a *Accruer) AccrueWindow(ctx context.Context, window time.Time) error {
 	return nil
 }
 
-// Run ticks hourly until ctx is cancelled, accruing the previous complete hour.
+// CatchUp accrues every missing hour from the watermark up to the last complete hour.
+func (a *Accruer) CatchUp(ctx context.Context) error {
+	target := a.now().Truncate(time.Hour).Add(-time.Hour)
+	last, err := a.Ledger.Store.AccrualWatermark(ctx, a.Name)
+	if err != nil {
+		return fmt.Errorf("ledger.catchUp watermark: %w", err)
+	}
+	start := target
+	if !last.IsZero() {
+		start = last.UTC().Truncate(time.Hour).Add(time.Hour)
+		if start.After(target) {
+			return nil
+		}
+	}
+	n := 0
+	for w := start; !w.After(target); w = w.Add(time.Hour) {
+		if err := a.AccrueWindow(ctx, w); err != nil {
+			return fmt.Errorf("ledger.catchUp %s: %w", w.Format(time.RFC3339), err)
+		}
+		if err := a.Ledger.Store.SetAccrualWatermark(ctx, a.Name, w); err != nil {
+			return fmt.Errorf("ledger.catchUp watermark: %w", err)
+		}
+		n++
+		if n >= maxCatchUpHours {
+			break
+		}
+	}
+	return nil
+}
+
+// Run ticks until ctx is cancelled, catching up missed hours on every tick.
 func (a *Accruer) Run(ctx context.Context) {
-	t := time.NewTicker(time.Hour)
+	tick := a.Tick
+	if tick <= 0 {
+		tick = time.Hour
+	}
+	t := time.NewTicker(tick)
 	defer t.Stop()
-	window := a.now().Truncate(time.Hour).Add(-time.Hour)
-	if err := a.AccrueWindow(ctx, window); err != nil {
-		return
+	if err := a.CatchUp(ctx); err != nil {
+		slog.Error("ledger.accrue", "err", err)
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			window := a.now().Truncate(time.Hour).Add(-time.Hour)
-			_ = a.AccrueWindow(ctx, window)
+			if err := a.CatchUp(ctx); err != nil {
+				slog.Error("ledger.accrue", "err", err)
+			}
 		}
 	}
 }

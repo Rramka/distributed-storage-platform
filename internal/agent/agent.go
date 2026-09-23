@@ -121,6 +121,7 @@ func (a *Agent) TLSConfig() *tls.Config {
 // ServeFragments listens on cfg.FragmentAddr with TLS and runs heartbeats.
 func (a *Agent) ServeFragments(ctx context.Context) error {
 	go a.heartbeatLoop(ctx)
+	go a.scrubLoop(ctx)
 	srv := &http.Server{
 		Addr:              a.cfg.FragmentAddr,
 		Handler:           a.Handler(),

@@ -17,6 +17,7 @@ func TestStatus(t *testing.T) {
 		{CodeInvalidRequest, http.StatusBadRequest},
 		{CodeUnauthenticated, http.StatusUnauthorized},
 		{CodeForbidden, http.StatusForbidden},
+		{CodeQuotaExceeded, http.StatusForbidden},
 		{CodeNotFound, http.StatusNotFound},
 		{CodeConflict, http.StatusConflict},
 		{CodeAlreadyExists, http.StatusConflict},

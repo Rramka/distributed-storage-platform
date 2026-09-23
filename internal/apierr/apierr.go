@@ -19,6 +19,7 @@ const (
 	CodeInternal             = "internal"
 	CodeManifestInvalid      = "manifest_invalid"
 	CodePlacementUnavailable = "placement_unavailable"
+	CodeQuotaExceeded        = "quota_exceeded"
 )
 
 // Envelope is the JSON body for every non-2xx response.
@@ -40,7 +41,7 @@ func Status(code string) int {
 		return http.StatusBadRequest
 	case CodeUnauthenticated:
 		return http.StatusUnauthorized
-	case CodeForbidden:
+	case CodeForbidden, CodeQuotaExceeded:
 		return http.StatusForbidden
 	case CodeNotFound:
 		return http.StatusNotFound

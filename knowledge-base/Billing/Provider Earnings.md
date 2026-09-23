@@ -18,7 +18,8 @@ egress_earning  = GB_served   * egress_rate  * R(node)
 Phase 1: `storage_rate` ≈ 1.5 CRD/GB-month, `egress_rate` = 0.5 CRD/GB.
 
 ```
-R = uptime_30d * audit_pass_30d * reputation_factor   // clamped [0, 1.2]
+reputation_factor = 0.8 + 0.4 * reputation            // reputation is the [0, 1] EWMA
+R = uptime_30d * audit_pass_30d * reputation_factor   // clamped [0, 1.2], as basis points
 ```
 
 Same family of signals as [[Scheduler]] / [[Reputation]]: flaky nodes earn less *and* get fewer placements.

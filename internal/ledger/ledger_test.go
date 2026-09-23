@@ -70,6 +70,31 @@ func TestReliabilityBPDegradedLess(t *testing.T) {
 	}
 }
 
+func TestReliabilityBPPremium(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		up, audit, rep float32
+		want           int64
+	}{
+		{1, 1, 1, 12000},
+		{1, 1, 0.5, 10000},
+		{1, 1, 0, 8000},
+		{0.5, 1, 1, 6000},
+	}
+	for _, tc := range cases {
+		got := ReliabilityBP(tc.up, tc.audit, tc.rep)
+		if got != tc.want {
+			t.Fatalf("R(%v,%v,%v)=%d want %d", tc.up, tc.audit, tc.rep, got, tc.want)
+		}
+	}
+	if ReputationFactor(1) != 1.2 {
+		t.Fatalf("factor %v", ReputationFactor(1))
+	}
+	if ReliabilityBP(1, 1, 1) <= 10000 {
+		t.Fatal("clean long-lived node must exceed 10000 bp")
+	}
+}
+
 func TestSumZeroEmpty(t *testing.T) {
 	t.Parallel()
 	if SumZero(nil) == nil {

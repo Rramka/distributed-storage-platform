@@ -70,11 +70,36 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 		return fmt.Errorf("agent.heartbeat: %w", err)
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("agent.heartbeat: %w", err)
+	}
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("agent.heartbeat: http %d", resp.StatusCode)
 	}
+	var out heartbeatResponse
+	if err := json.Unmarshal(raw, &out); err == nil {
+		a.handleMessages(ctx, out.Messages)
+	}
+	_ = a.maybeRenew(ctx)
 	return nil
+}
+
+func (a *Agent) handleMessages(ctx context.Context, msgs []json.RawMessage) {
+	for _, raw := range msgs {
+		var m struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &m) != nil {
+			continue
+		}
+		switch m.Type {
+		case "renew":
+			_ = a.renewCert(ctx)
+		case "scrub":
+			_ = a.scrubOnce(ctx)
+		}
+	}
 }
 
 func memRatio() float64 {

@@ -11,9 +11,9 @@ Build rule: **every milestone ends with something that runs end-to-end**. Healin
 
 ## Solo builder track (active)
 
-One person, ~10–15 hours/week, AI-assisted. The investable artifact was M0–M4. **M5 (meters + internal ledger) is the active engineering track.**
+One person, ~10–15 hours/week, AI-assisted. **M0–M5 (including M5.1 honest books), pilot readiness, and M5b (quota + statements) are in the repo.**
 
-Deferred: dashboards, JWT, installers, rebalancing, reputation beyond a scalar, S3, real money, monthly statements and quota (M5b). See [[Non-goals]] and `docs/10-mvp-roadmap.md`.
+Deferred: dashboards, JWT, installers, rebalancing, reputation beyond a scalar, S3, real money. See [[Non-goals]] and `docs/10-mvp-roadmap.md`.
 
 ## Phase 1 slice
 
@@ -35,7 +35,11 @@ W13: `harness partition` (`docker compose pause`, not iptables) with a ≥ 13/16
 
 W14: node registration is server-authenticated TLS (`:8444`); one registration code yields one node row; DELETE tickets are single-use; `make demo-ready` + `harness m4` assert `dsp get` while six holders are down. Docs match HTTP/JSON + binary tickets.
 
-W15–W17 (M5): honest meters (`uptime_ratio` from heartbeat counts, PUT ingest, signed GET egress receipts, deletion lifecycle), `USAGE_EVENTS` JetStream, `cmd/ledger` on `:8085`, invariant 3 un-skipped, accelerated-month balanced books.
+W15–W17 (M5): honest meters, `USAGE_EVENTS` audit trail, `cmd/ledger` on `:8085`, invariant 3, accelerated-month balanced books.
+
+W18 (M5.1): `ledger_txns` idempotency, accruer watermark/backfill, `reputation_factor` [0.8, 1.2], per-receipt egress IDs, `GET /earnings` by window/type, adjustments.
+
+W19–W21: cert renew/revoke, agent scrub, audit_logs writes, M5b quota (`403 quota_exceeded`) and monthly statements.
 
 ## After MVP
 

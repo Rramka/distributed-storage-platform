@@ -581,7 +581,9 @@ func (s *Server) handleEarnings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := mustIdentity(r)
-	view, err := s.ledger.Earnings(r.Context(), id.User.ID)
+	from, _ := time.Parse(time.RFC3339, r.URL.Query().Get("from"))
+	to, _ := time.Parse(time.RFC3339, r.URL.Query().Get("to"))
+	view, err := s.ledger.Earnings(r.Context(), id.User.ID, from, to)
 	if err != nil {
 		apierr.Write(w, apierr.CodeInternal, "internal error", requestID(r))
 		return
@@ -711,6 +713,8 @@ func (s *Server) writeMeta(w http.ResponseWriter, r *http.Request, err error) {
 		apierr.Write(w, apierr.CodeConflict, "too few fragments confirmed", rid)
 	case errors.Is(err, metadata.ErrUnavailable), errors.Is(err, store.ErrUnavailable):
 		apierr.Write(w, apierr.CodePlacementUnavailable, "placement unavailable", rid)
+	case errors.Is(err, metadata.ErrQuota):
+		apierr.Write(w, apierr.CodeQuotaExceeded, "quota exceeded", rid)
 	default:
 		slog.Error("metadata call failed", "err", err, "request_id", rid)
 		apierr.Write(w, apierr.CodeInternal, "internal error", rid)

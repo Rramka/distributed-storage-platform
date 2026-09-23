@@ -42,7 +42,10 @@ These remain specified in the docs for later phases. They are **out of the solo 
 - **W14** — Harden the durability claim. Registration moves onto server-authenticated TLS (`:8444`); one registration code yields one node row; DELETE tickets consume their nonce; failed API-key auth is IP-rate-limited. `PlanUpload` aborts a stranded pending version; download plans prefer online placements; `make demo-ready` + `harness m4` run `dsp get` while six holders are down. Docs match the HTTP/JSON + binary-ticket solo track.
 - **W15** — Honest meters. Real `uptime_ratio` from heartbeat counts; 30-day reliability query; `bytes_ingested` from PUT receipts; signed egress receipts + `POST /download/{id}/report`; deletion lifecycle (`expiring` → agent DELETE → `deleted`). Exit: meters match placement map and transfer receipts.
 - **W16** — Usage stream + double-entry ledger. `USAGE_EVENTS` JetStream, `cmd/ledger` on `:8085`, integer µCRD, injectable-clock accruer, deferred Postgres trigger enforcing `SUM(amount)=0` per `txn_id`. Exit: hourly accruals post balanced transactions.
-- **W17** — Reporting and M5 exit. `GET /storage`, `GET /earnings`, `GET /nodes/{id}/stats`; invariant 3 un-skipped; accelerated-month test (720 windows) produces balanced books. Monthly statements and quota enforcement remain M5b.
+- **W17** — Reporting and M5 exit. `GET /storage`, `GET /earnings`, `GET /nodes/{id}/stats`; invariant 3 un-skipped; accelerated-month test (720 windows) produces balanced books.
+- **W18** — M5.1 honest books. `ledger_txns` primary key, accruer watermark and backfill, `reputation_factor` in [0.8, 1.2], per-receipt egress event IDs, `GET /earnings` by window and type, internal adjustments. **M5 exit recorded.**
+- **W19–W20** — Pilot readiness. `POST /internal/nodes/renew` (same public key), `nodes.revoked_at`, heartbeat and ticket paths reject revoked/quarantined/expired certs, heartbeat `messages` applied, agent scrub self-report → `lost` + repair, `audit_logs` writes.
+- **W21** — M5b. Immutable `statements` on cycle close; `LEDGER_CREDIT_FLOOR_UCRD` blocks `POST /upload` with `403 quota_exceeded` while GET and DELETE still work.
 
 A fundraise track runs in parallel (~2 hours/week): market research, competitive comparison, deck, weekly investor update. See `business/` and the Cursor skills `market-research` / `investor-update` / `demo-capture`.
 
@@ -96,9 +99,9 @@ Reed–Solomon 10+6 on the existing encrypted chunks, plan/transfer/commit with 
 Health Monitor state machine (`online → suspect → offline`), NATS events, Repair Service with priority queue, ciphertext reconstruction, flap handling. Storage challenges with pre-computed challenge sets (Health Monitor refresh path) and full scheduler scoring + weighted sampling ([06-scheduler-and-repair.md](06-scheduler-and-repair.md)) are the M4 follow-up slice after the exit test. **Shipped.**
 **Exit:** kill 6 of 16 agents holding a file; within minutes all chunks are back to 16/16 healthy on survivors + fresh nodes, download works throughout. This milestone is the platform's core claim — it gets the most test investment. The Compose fleet is 24 agents so 8 spares exist under the owner/region/ASN caps.
 
-### M5 — Ledger + billing (week 13–14) — **active**
-Usage event stream, double-entry ledger, hourly accruals, reliability multiplier, `GET /storage` and `GET /earnings` ([09-billing-ledger.md](09-billing-ledger.md)). Quota enforcement and monthly statements are M5b.
-**Exit:** a simulated month (accelerated clock) produces balanced books — every txn sums to zero, customer charges reconcile with provider earnings + platform margin.
+### M5 — Ledger + billing (week 13–14) — **shipped** (M5.1 + M5b)
+Usage event stream (audit trail), meter-sourced double-entry ledger, hourly accruals with watermark, reliability multiplier, `GET /storage` and `GET /earnings` ([09-billing-ledger.md](09-billing-ledger.md)). Quota enforcement and monthly statements (M5b) are included.
+**Exit:** a simulated month (accelerated clock) produces balanced books — every txn sums to zero, customer charges reconcile with provider earnings + platform margin. Concurrent `PostTxn` cannot double-post. Quota blocks uploads at the credit floor.
 
 ### M6 — Dashboards + MVP hardening (week 15–17) — deferred on the solo track
 Customer dashboard (files, usage), provider dashboard (nodes, earnings, registration codes), admin dashboard (network map, repair queue, quarantine actions); audit logging wired through; agent installers + self-update for the three OSes; load and chaos test pass (below).

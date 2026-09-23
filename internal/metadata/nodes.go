@@ -102,7 +102,50 @@ func (s *StoreService) RegisterNode(ctx context.Context, code string, csr []byte
 		}
 		return store.Node{}, "", err
 	}
+	_ = s.Store.InsertAudit(ctx, "node", &n.ID, "node.register", "node", &n.ID, map[string]any{"owner_id": n.OwnerID.String()})
 	return n, string(certPEM), nil
+}
+
+// RenewCertificate issues a new leaf for the same public key.
+// peerFP must match the registry fingerprint so a superseded leaf cannot rotate the node.
+func (s *StoreService) RenewCertificate(ctx context.Context, nodeID uuid.UUID, csr, peerFP []byte) (string, error) {
+	if s.IssueNode == nil || len(csr) == 0 {
+		return "", ErrInvalid
+	}
+	n, err := s.Store.NodeByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+	if err := store.AdmitNodeRenew(n); err != nil {
+		return "", ErrForbidden
+	}
+	if !bytesEqual(peerFP, n.CertFingerprint) {
+		return "", ErrForbidden
+	}
+	endpoint := n.Endpoint
+	certPEM, pub, fp, expires, err := s.IssueNode(csr, nodeID, endpoint)
+	if err != nil {
+		return "", err
+	}
+	if !bytesEqual(pub, n.PublicKey) {
+		return "", ErrInvalid
+	}
+	if err := s.Store.RotateNodeCert(ctx, nodeID, fp, string(certPEM), expires); err != nil {
+		return "", err
+	}
+	_ = s.Store.InsertAudit(ctx, "node", &nodeID, "node.renew", "node", &nodeID, nil)
+	return string(certPEM), nil
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	var v byte
+	for i := range a {
+		v |= a[i] ^ b[i]
+	}
+	return v == 0
 }
 
 // HeartbeatNode updates durable liveness fields.

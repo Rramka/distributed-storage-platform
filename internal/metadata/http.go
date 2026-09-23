@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Rramka/distributed-storage-platform/internal/apierr"
+	"github.com/Rramka/distributed-storage-platform/internal/ca"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/google/uuid"
 )
@@ -42,6 +44,36 @@ func MountNode(mux *http.ServeMux, svc Service) {
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"node_id": n.ID.String(), "cert_pem": pem, "endpoint": n.Endpoint})
 	})
+	if rs, ok := svc.(*StoreService); ok {
+		mux.HandleFunc("POST /internal/nodes/renew", func(w http.ResponseWriter, r *http.Request) {
+			if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+				writeErr(w, r, ErrUnauthenticated)
+				return
+			}
+			nodeID, err := ca.ParseNodeID(r.TLS.PeerCertificates[0])
+			if err != nil {
+				writeErr(w, r, ErrUnauthenticated)
+				return
+			}
+			var req struct {
+				CSR string `json:"csr"`
+			}
+			if !decode(w, r, &req) {
+				return
+			}
+			csr, err := decodeB64(req.CSR)
+			if err != nil {
+				writeErr(w, r, ErrInvalid)
+				return
+			}
+			fp := sha256.Sum256(r.TLS.PeerCertificates[0].Raw)
+			pem, err := rs.RenewCertificate(r.Context(), nodeID, csr, fp[:])
+			if writeErr(w, r, err) {
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"node_id": nodeID.String(), "cert_pem": pem})
+		})
+	}
 }
 
 // Mount registers internal HTTP routes on mux. GET /healthz should already be present.
@@ -507,6 +539,8 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) bool {
 		apierr.Write(w, apierr.CodeConflict, "too few fragments confirmed", rid)
 	case errors.Is(err, ErrUnavailable), errors.Is(err, store.ErrUnavailable):
 		apierr.Write(w, apierr.CodePlacementUnavailable, "placement unavailable", rid)
+	case errors.Is(err, ErrQuota):
+		apierr.Write(w, apierr.CodeQuotaExceeded, "quota exceeded", rid)
 	default:
 		slog.Error("metadata handler", "err", err, "request_id", rid)
 		apierr.Write(w, apierr.CodeInternal, "internal error", rid)

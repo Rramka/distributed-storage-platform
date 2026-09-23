@@ -186,6 +186,7 @@ type UsageEvent struct {
 	Kind      string         `json:"kind"`
 	SubjectID uuid.UUID      `json:"subject_id"`
 	Window    time.Time      `json:"window"`
+	Dedup     string         `json:"dedup,omitempty"`
 	Payload   map[string]any `json:"payload"`
 }
 
@@ -204,7 +205,21 @@ func usageSubject(kind string) (string, bool) {
 
 // UsageMsgID is the JetStream dedup id for a usage event.
 func UsageMsgID(kind string, subject uuid.UUID, window time.Time) string {
-	return fmt.Sprintf("usage:%s:%s:%d", kind, subject, window.UTC().Truncate(time.Hour).Unix())
+	return UsageMsgIDWithDedup(kind, subject, window, "")
+}
+
+// UsageMsgIDWithDedup appends an extra uniqueness token (receipt nonce for egress).
+func UsageMsgIDWithDedup(kind string, subject uuid.UUID, window time.Time, dedup string) string {
+	id := fmt.Sprintf("usage:%s:%s:%d", kind, subject, window.UTC().Truncate(time.Hour).Unix())
+	if dedup != "" {
+		return id + ":" + dedup
+	}
+	return id
+}
+
+// MsgID is the deterministic ID for this event.
+func (ev UsageEvent) MsgID() string {
+	return UsageMsgIDWithDedup(ev.Kind, ev.SubjectID, ev.Window, ev.Dedup)
 }
 
 // PublishUsage emits a metering event. Nil bus is a no-op.
@@ -225,7 +240,7 @@ func (b *Bus) PublishUsage(ctx context.Context, ev UsageEvent) error {
 	if err != nil {
 		return fmt.Errorf("events.publishUsage: %w", err)
 	}
-	id := UsageMsgID(ev.Kind, ev.SubjectID, ev.Window)
+	id := ev.MsgID()
 	if _, err := b.js.Publish(ctx, subj, payload, jetstream.WithMsgID(id)); err != nil {
 		return fmt.Errorf("events.publishUsage: %w", err)
 	}

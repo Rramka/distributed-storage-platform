@@ -46,6 +46,14 @@ func TestUsageMsgID(t *testing.T) {
 	if UsageMsgID(UsageStorage, id, window.Add(30*time.Minute)) != got {
 		t.Fatal("same hour must share msg id")
 	}
+	a := UsageEvent{Kind: UsageEgress, SubjectID: id, Window: window, Dedup: "aa"}
+	b := UsageEvent{Kind: UsageEgress, SubjectID: id, Window: window, Dedup: "bb"}
+	if a.MsgID() == b.MsgID() {
+		t.Fatal("egress receipts in the same hour must not share a msg id")
+	}
+	if a.MsgID() != UsageMsgIDWithDedup(UsageEgress, id, window, "aa") {
+		t.Fatalf("got %q", a.MsgID())
+	}
 }
 
 func TestNodeSubject(t *testing.T) {

@@ -83,6 +83,11 @@ func (s *StoreService) PlanUpload(ctx context.Context, userID uuid.UUID, m store
 	if s.Place == nil || s.SignTicket == nil {
 		return PlanResult{}, ErrInvalid
 	}
+	if s.QuotaCheck != nil {
+		if err := s.QuotaCheck(ctx, userID); err != nil {
+			return PlanResult{}, err
+		}
+	}
 	planned, err := s.Store.BeginUpload(ctx, userID, m)
 	if err != nil {
 		return PlanResult{}, err
@@ -182,6 +187,7 @@ func (s *StoreService) PlanUpload(ctx context.Context, userID uuid.UUID, m store
 		return PlanResult{}, ErrInvalid
 	}
 	committed = true
+	_ = s.Store.InsertAudit(ctx, "user", &userID, "ticket.batch", "file", &planned.File.ID, map[string]any{"count": len(out)})
 	return PlanResult{UploadID: planned.Version.ID, FileID: planned.File.ID, ExpiresAt: exp, Placements: out}, nil
 }
 
@@ -304,6 +310,9 @@ func (s *StoreService) PlanDownload(ctx context.Context, userID, fileID uuid.UUI
 func pickDownloadPlacements(all []store.DownloadPlacement, need int) []store.DownloadPlacement {
 	var online, rest []store.DownloadPlacement
 	for _, p := range all {
+		if p.Node.RevokedAt != nil || p.Node.Status == "quarantined" {
+			continue
+		}
 		if p.Node.Status == "online" {
 			online = append(online, p)
 		} else {
@@ -324,6 +333,11 @@ func (s *StoreService) ReportDownload(ctx context.Context, userID, fileID uuid.U
 	seen := map[string]struct{}{}
 	var total int64
 	perNode := map[uuid.UUID]int64{}
+	type egressRec struct {
+		nonce []byte
+		bytes int64
+	}
+	var recs []egressRec
 	for _, w := range wires {
 		rec, err := receipts.ParseUnsigned(w)
 		if err != nil || len(rec.Nonce) != 16 {
@@ -353,20 +367,25 @@ func (s *StoreService) ReportDownload(ctx context.Context, userID, fileID uuid.U
 		}
 		total += int64(got.Size)
 		perNode[t.NodeID] += int64(got.Size)
+		recs = append(recs, egressRec{nonce: rec.Nonce, bytes: int64(got.Size)})
 	}
 	for nodeID, n := range perNode {
 		if err := s.Store.BumpNodeBytes(ctx, nodeID, 0, n); err != nil {
 			slog.Error("metadata.bumpEgress", "err", err, "node_id", nodeID)
 		}
 	}
-	if s.Bus != nil && total > 0 {
-		if err := s.Bus.PublishUsage(ctx, events.UsageEvent{
-			Kind:      events.UsageEgress,
-			SubjectID: userID,
-			Window:    time.Now().UTC(),
-			Payload:   map[string]any{"bytes": total, "file_id": fileID.String()},
-		}); err != nil {
-			slog.Error("metadata.usage egress", "err", err)
+	if s.Bus != nil {
+		now := time.Now().UTC()
+		for _, rec := range recs {
+			if err := s.Bus.PublishUsage(ctx, events.UsageEvent{
+				Kind:      events.UsageEgress,
+				SubjectID: userID,
+				Window:    now,
+				Dedup:     hex.EncodeToString(rec.nonce),
+				Payload:   map[string]any{"bytes": rec.bytes, "file_id": fileID.String(), "nonce": hex.EncodeToString(rec.nonce)},
+			}); err != nil {
+				slog.Error("metadata.usage egress", "err", err)
+			}
 		}
 	}
 	return nil

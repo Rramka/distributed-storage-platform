@@ -11,7 +11,7 @@ const nodeCols = `
 	id, owner_id, cert_fingerprint, public_key, cert_pem, cert_expires_at,
 	hostname_label, os, agent_version, country, region, asn, endpoint,
 	capacity_bytes, used_bytes, status, reputation, registered_at, last_seen_at,
-	probation_until, reputation_updated_at`
+	probation_until, reputation_updated_at, revoked_at`
 
 func scanNode(row interface{ Scan(dest ...any) error }) (Node, error) {
 	var n Node
@@ -20,7 +20,7 @@ func scanNode(row interface{ Scan(dest ...any) error }) (Node, error) {
 		&n.ID, &n.OwnerID, &n.CertFingerprint, &n.PublicKey, &n.CertPEM, &n.CertExpiresAt,
 		&label, &n.OS, &n.AgentVersion, &country, &region, &n.ASN, &n.Endpoint,
 		&n.CapacityBytes, &n.UsedBytes, &n.Status, &n.Reputation, &n.RegisteredAt, &n.LastSeenAt,
-		&n.ProbationUntil, &n.ReputationUpdatedAt,
+		&n.ProbationUntil, &n.ReputationUpdatedAt, &n.RevokedAt,
 	)
 	if label != nil {
 		n.HostnameLabel = *label
@@ -135,7 +135,11 @@ func (s *Store) NodesByRegion(ctx context.Context, region string) ([]Node, error
 
 // ListOnlineNodes returns nodes with status=online.
 func (s *Store) ListOnlineNodes(ctx context.Context) ([]Node, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+nodeCols+` FROM nodes WHERE status = 'online' ORDER BY id`)
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+nodeCols+` FROM nodes
+		WHERE status = 'online' AND revoked_at IS NULL
+		  AND (cert_expires_at IS NULL OR cert_expires_at > now())
+		ORDER BY id`)
 	if err != nil {
 		return nil, mapQueryErr("store.listOnlineNodes", err)
 	}
@@ -272,4 +276,53 @@ func (s *Store) ApplyReputationEvent(ctx context.Context, id uuid.UUID, signal f
 		return 0, 0, mapQueryErr("store.applyReputationEvent", err)
 	}
 	return from, to, nil
+}
+
+// AdmitNode rejects revoked, quarantined, or expired certificates.
+func AdmitNode(n Node, now time.Time) error {
+	if n.RevokedAt != nil {
+		return ErrNodeDenied
+	}
+	if n.Status == "quarantined" {
+		return ErrNodeDenied
+	}
+	if n.CertExpiresAt != nil && !n.CertExpiresAt.After(now) {
+		return ErrNodeDenied
+	}
+	return nil
+}
+
+// AdmitNodeRenew allows an expired cert to renew; still rejects revoked/quarantined.
+func AdmitNodeRenew(n Node) error {
+	if n.RevokedAt != nil || n.Status == "quarantined" {
+		return ErrNodeDenied
+	}
+	return nil
+}
+
+// RotateNodeCert updates fingerprint and PEM; public_key is unchanged.
+func (s *Store) RotateNodeCert(ctx context.Context, id uuid.UUID, fp []byte, certPEM string, expires time.Time) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE nodes SET cert_fingerprint = $2, cert_pem = $3, cert_expires_at = $4
+		WHERE id = $1 AND revoked_at IS NULL
+	`, id, fp, certPEM, expires)
+	if err != nil {
+		return mapQueryErr("store.rotateNodeCert", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RevokeNode stamps revoked_at.
+func (s *Store) RevokeNode(ctx context.Context, id uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE nodes SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, id)
+	if err != nil {
+		return mapQueryErr("store.revokeNode", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

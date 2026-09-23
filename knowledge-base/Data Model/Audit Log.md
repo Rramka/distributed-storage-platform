@@ -8,8 +8,8 @@ aliases:
 
 # Audit Log
 
-Insert-only table. Every security-relevant action: logins, key issuance, [[Node Registration]], quarantine, deletions, admin operations, ticket batch issuance.
+Insert-only table. Writers exist for API-key issue/revoke, [[Node Registration]] / renew, file deletion, ticket batches, honest scrub self-report, and ledger adjustments.
 
-`actor_type`: user | node | service | admin. No service credential has UPDATE/DELETE grants.
+`actor_type`: user | node | service | admin. `dsp_readonly` has SELECT only; UPDATE/DELETE are revoked from PUBLIC.
 
 Related: [[Admin Dashboard]], [[Map of Security]]

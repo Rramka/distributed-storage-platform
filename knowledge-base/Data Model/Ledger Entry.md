@@ -12,6 +12,6 @@ One leg of a double-entry transaction. `amount` in micro-credits (positive = cre
 
 Types: `storage_charge` | `egress_charge` | `storage_earning` | `egress_earning` | `adjustment` (later: `deposit`, `payout`).
 
-Immutable. Corrections are new adjustment txns. `reference` JSON links to window / node / file / event ID.
+Immutable. Corrections are new adjustment txns via `PostAdjustment` (reason required). `ledger_txns.txn_id` is the uniqueness key. `reference` JSON links to window / node / file / event ID.
 
 Related: [[Map of Billing]], [[Ledger Service]], [[Audit Log]]

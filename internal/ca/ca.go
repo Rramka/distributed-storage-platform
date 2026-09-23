@@ -230,9 +230,11 @@ func (c *CA) ServerTLSConfig(cert tls.Certificate, requireClient bool) *tls.Conf
 		MinVersion:   tls.VersionTLS13,
 		Certificates: []tls.Certificate{cert},
 	}
+	cfg.ClientCAs = c.Pool()
 	if requireClient {
-		cfg.ClientCAs = c.Pool()
 		cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	} else {
+		cfg.ClientAuth = tls.RequestClientCert
 	}
 	return cfg
 }

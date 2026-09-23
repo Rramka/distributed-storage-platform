@@ -10,10 +10,12 @@ import (
 	"github.com/Rramka/distributed-storage-platform/internal/ca"
 	"github.com/Rramka/distributed-storage-platform/internal/events"
 	"github.com/Rramka/distributed-storage-platform/internal/httpserver"
+	"github.com/Rramka/distributed-storage-platform/internal/ledger"
 	"github.com/Rramka/distributed-storage-platform/internal/metadata"
 	"github.com/Rramka/distributed-storage-platform/internal/scheduler"
 	"github.com/Rramka/distributed-storage-platform/internal/store"
 	"github.com/Rramka/distributed-storage-platform/internal/tickets"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -30,6 +32,16 @@ func main() {
 	defer st.Close()
 
 	svc := &metadata.StoreService{Store: st}
+	led := &ledger.Ledger{Store: st, Rates: ledger.DefaultRates()}
+	svc.QuotaCheck = func(ctx context.Context, userID uuid.UUID) error {
+		if err := led.CheckQuota(ctx, userID); err != nil {
+			if errors.Is(err, ledger.ErrQuota) {
+				return metadata.ErrQuota
+			}
+			return err
+		}
+		return nil
+	}
 	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
 		bus, err := events.Connect(context.Background(), natsURL)
 		if err != nil {

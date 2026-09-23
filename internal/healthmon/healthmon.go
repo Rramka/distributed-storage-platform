@@ -51,6 +51,10 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, apierr.CodeForbidden, "unknown node", apierr.NewRequestID())
 		return
 	}
+	if err := store.AdmitNode(node, time.Now().UTC()); err != nil {
+		apierr.Write(w, apierr.CodeForbidden, "node denied", apierr.NewRequestID())
+		return
+	}
 	var req struct {
 		NodeID            string  `json:"node_id"`
 		FreeBytes         int64   `json:"free_bytes"`
@@ -113,8 +117,61 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 			slog.Error("healthmon publish", "err", err, "node_id", node.ID)
 		}
 	}
+	msgs := []any{}
+	if node.CertExpiresAt != nil && time.Until(*node.CertExpiresAt) < 7*24*time.Hour {
+		msgs = append(msgs, map[string]string{"type": "renew"})
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"messages": []any{}})
+	_ = json.NewEncoder(w).Encode(map[string]any{"messages": msgs})
+}
+
+// MountScrub registers the agent self-report endpoint.
+func MountScrub(mux *http.ServeMux, s *Server) {
+	mux.HandleFunc("POST /internal/scrub-report", s.handleScrubReport)
+}
+
+func (s *Server) handleScrubReport(w http.ResponseWriter, r *http.Request) {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+		apierr.Write(w, apierr.CodeUnauthenticated, "mtls required", apierr.NewRequestID())
+		return
+	}
+	fp := sha256.Sum256(r.TLS.PeerCertificates[0].Raw)
+	node, err := s.Store.NodeByFingerprint(r.Context(), fp[:])
+	if err != nil {
+		apierr.Write(w, apierr.CodeForbidden, "unknown node", apierr.NewRequestID())
+		return
+	}
+	if err := store.AdmitNode(node, time.Now().UTC()); err != nil {
+		apierr.Write(w, apierr.CodeForbidden, "node denied", apierr.NewRequestID())
+		return
+	}
+	var req struct {
+		FragmentID string `json:"fragment_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.Write(w, apierr.CodeInvalidRequest, "invalid request", apierr.NewRequestID())
+		return
+	}
+	fid, err := uuid.Parse(req.FragmentID)
+	if err != nil {
+		apierr.Write(w, apierr.CodeInvalidRequest, "invalid request", apierr.NewRequestID())
+		return
+	}
+	lp, err := s.Store.MarkPlacementLost(r.Context(), fid, node.ID)
+	if err != nil {
+		apierr.Write(w, apierr.CodeInternal, "internal error", apierr.NewRequestID())
+		return
+	}
+	_, _, _ = s.Store.ApplyReputationEvent(r.Context(), node.ID, store.SignalHonestSelfReport)
+	_ = s.Store.InsertAudit(r.Context(), "node", &node.ID, "node.scrub", "fragment", &fid, nil)
+	if s.Bus != nil && lp.ChunkID != uuid.Nil {
+		healthy, err := s.Store.ChunkHealth(r.Context(), lp.ChunkID)
+		if err == nil {
+			_ = s.Bus.PublishRepair(r.Context(), events.RepairJob{ChunkID: lp.ChunkID, Healthy: healthy})
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 }
 
 // TLSListenerConfig is unused placeholder for cmd wiring.
